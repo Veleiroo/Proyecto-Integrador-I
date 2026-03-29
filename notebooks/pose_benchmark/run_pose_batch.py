@@ -9,6 +9,9 @@ import time
 import urllib.request
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_YOLO_WEIGHTS = PROJECT_ROOT / "models" / "yolo" / "yolov8s-pose.pt"
+
 
 MEDIAPIPE_REQUIRED_IDS = {
     "nose": 0,
@@ -461,7 +464,7 @@ def main() -> int:
     parser.add_argument("--warmup-images", type=int, default=2)
     parser.add_argument("--min-confidence", type=float, default=0.3)
     parser.add_argument("--input-size", type=int, default=192)
-    parser.add_argument("--yolo-weights", default="yolov8s-pose.pt")
+    parser.add_argument("--yolo-weights", default=str(DEFAULT_YOLO_WEIGHTS))
     parser.add_argument("--yolo-device", default="auto")
     parser.add_argument("--movenet-device", default="cpu", choices=["auto", "gpu", "cpu"])
     parser.add_argument("--mediapipe-model-path", default="")
