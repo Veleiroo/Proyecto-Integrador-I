@@ -1,0 +1,7 @@
+# Computer Vision & Inference
+inference>=0.9.0
+opencv-python>=4.8.0
+supervision>=0.18.0
+
+# Environment Management
+python-dotenv>=1.0.0

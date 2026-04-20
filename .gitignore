@@ -1,0 +1,32 @@
+# There may be files here that are not used, but may be used in the future.
+
+# Environments
+.env
+.venv/
+env/
+venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Logs
+app.log
+*.log
+
+# Local Image Captures & Camera Test Outputs
+*.jpg
+*.jpeg
+*.png
+*.bmp
+captured_frames/
+test_images/
+
+# VSCode Specific
+.vscode/
+
+# Datasets
+datasets/
