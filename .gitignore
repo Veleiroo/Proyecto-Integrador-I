@@ -16,3 +16,6 @@ models/mediapipe/
 
 # Notebook outputs
 notebooks/pose_benchmark/results/
+notebooks/ergonomics/results/
+.codex
+.codex/

@@ -1,26 +1,29 @@
 # Proyecto Integrador I
 
-Prueba de concepto de analisis ergonomico mediante vision por computador.
+Prueba de concepto de analisis ergonomico mediante vision por computador para puestos de trabajo sedentarios.
 
 ## Objetivo
 
-El proyecto busca evaluar posturas de trabajo frente a una webcam y extraer una base tecnica para un futuro sistema de feedback ergonomico. En esta fase no hay producto final cerrado ni entrenamiento propio del modelo: el foco esta en comparar modelos de pose preentrenados y medir si sus keypoints son utiles para reglas ergonomicas.
+El proyecto busca construir una base tecnica para un futuro sistema de feedback ergonomico preventivo a partir de imagenes de webcam. La idea no es hacer supervision laboral ni reconocimiento de identidad, sino detectar desviaciones posturales y traducirlas a reglas interpretables y recomendaciones simples.
+
+La documentacion de referencia esta en `Documentación/`:
+
+- `AVP1 (Plan de proyecto).pdf`
+- `Caso_de_uso_Salud_DATOS.pdf`
 
 ## Estado actual
 
-Lo que ya existe en la repo:
+La repo ya no esta solo en fase de benchmark. Ahora mismo hay dos bloques de trabajo:
 
-- documentacion base del proyecto en `Documentación/`
-- benchmark inicial de modelos de pose en `notebooks/pose_benchmark/`
-- comparativa de `YOLO Pose`, `MoveNet` y `MediaPipe Pose`
-- dataset principal de arranque: `posture_correction_v4`
+1. Benchmark de modelos de pose
+2. Pipeline ergonomico modular sobre el caso de webcam frontal
 
-Decisiones de esta primera iteracion:
+### Decisiones tecnicas tomadas
 
-- `YOLO Pose` usa GPU si `torch` la detecta
-- `MoveNet` se ejecuta en CPU por estabilidad
-- `MediaPipe Pose` se ejecuta en CPU
-- la comparativa actual se centra en tren superior, porque el dataset principal no siempre muestra bien caderas y tronco inferior
+- `MediaPipe Pose` es el modelo principal para el caso frontal actual.
+- `MoveNet` queda como respaldo si mas adelante interesa explorar otra relacion precision/latencia.
+- El MVP actual se centra en tren superior frontal: cabeza, cuello y simetria de hombros.
+- El analisis de cabeza adelantada y espalda completa queda mejor planteado como extension lateral, no como requisito del MVP frontal.
 
 ## Estructura
 
@@ -29,58 +32,148 @@ Documentación/                PDFs del planning y del caso de uso
 data/raw/                     Datasets descargados localmente
 data/pose_subset/             Subsets generados para pruebas
 models/                       Assets descargados por los notebooks
-notebooks/pose_benchmark/     Notebook principal y utilidades del benchmark
+notebooks/pose_benchmark/     Benchmark inicial de modelos de pose
+notebooks/ergonomics/         Notebooks de pipeline, ejecucion larga y auditoria
+src/ergonomics/               Modulos reutilizables del pipeline ergonomico
 ```
 
-## Notebook principal
+## Datasets usados
 
-Archivo principal:
+Los datasets se resuelven desde `src/ergonomics/datasets.py`.
+
+- `posture_correction_v4_folder_v1`
+  Dataset principal del MVP. Webcam frontal. Es el mas cercano al caso real del proyecto.
+- `sitting_posture_4keypoint`
+  Dataset mas lateral. Buen candidato para validar una futura extension de perfil.
+- `desk_posture_coco_v1`
+  Dataset pequeno, tambien util para contraste lateral o dorsal.
+- `posture_detection_folder_v1`
+  Dataset auxiliar por carpetas con bastante ruido en etiquetas.
+- `sitting_posture_folder_v1`
+  Dataset auxiliar por carpetas con mezcla de clases y algunos casos ruidosos.
+
+## Benchmark de pose
+
+Notebook principal:
 
 - `notebooks/pose_benchmark/01_pose_benchmark_ergonomia.ipynb`
 
+Script asociado:
+
+- `notebooks/pose_benchmark/run_pose_batch.py`
+
 Que hace:
 
-1. Selecciona el dataset activo
-2. Escanea las imagenes y prepara un subset equilibrado
-3. Ejecuta los tres modelos de pose
+1. Selecciona un dataset activo
+2. Construye un subset equilibrado
+3. Ejecuta `YOLO Pose`, `MoveNet` y `MediaPipe Pose`
 4. Genera tablas y graficas comparativas
 5. Guarda resultados en `notebooks/pose_benchmark/results/`
 
-## Como ejecutarlo
+Resultado practico de esta fase:
 
-El flujo esperado es:
+- `MediaPipe Pose` sale como opcion principal para el dataset frontal base
+- `YOLO Pose` no compensa para este caso
+- `MoveNet` es util como contraste, pero queda por detras en cobertura ergonomica de tren superior
 
-1. Descargar los datasets manualmente en `data/raw/`
+## Pipeline ergonomico
+
+El pipeline modular esta en `src/ergonomics/`:
+
+- `paths.py`
+- `datasets.py`
+- `sampling.py`
+- `pose_inference.py`
+- `posture_rules.py`
+- `reporting.py`
+- `visualization.py`
+- `long_run.py`
+- `audit.py`
+
+### Notebooks de ergonomia
+
+- `notebooks/ergonomics/02_pipeline_ergonomico_base.ipynb`
+  Primera validacion del flujo `imagen -> pose -> variables -> reglas -> feedback`.
+- `notebooks/ergonomics/03_pipeline_ergonomico_long_run.ipynb`
+  Corrida larga y reanudable sobre un lote grande o el dataset completo.
+- `notebooks/ergonomics/04_auditoria_frontal_y_calibracion.ipynb`
+  Auditoria de etiquetas, falsos positivos y candidatos de recalibracion para el caso frontal.
+
+### Variables que ya se calculan
+
+En el estado actual, el motor de reglas mide:
+
+- `shoulder_tilt_deg`
+- `shoulder_height_diff_ratio`
+- `head_lateral_offset_ratio`
+- `neck_tilt_deg`
+- `trunk_tilt_deg`
+- `left_elbow_angle_deg`
+- `right_elbow_angle_deg`
+
+Estas variables se traducen a estados:
+
+- `adequate`
+- `improvable`
+- `risk`
+- `insufficient_data`
+
+## Hallazgos actuales
+
+La corrida larga ya ejecutada sobre `posture_correction_v4_folder_v1` confirma varias cosas:
+
+- El encuadre frontal da muy buena señal para nariz y hombros.
+- Caderas y muñecas casi nunca aparecen, asi que no tiene sentido dar mucho peso a tronco y codo completo en el MVP frontal.
+- El grupo `looks good` esta cayendo demasiado en `risk`, lo que indica que hay umbrales por recalibrar.
+- La auditoria actual apunta a que `shoulder_height_diff_ratio` esta siendo demasiado estricto para este dataset.
+- La medicion de cabeza adelantada no queda bien resuelta con este encuadre frontal y debe tratarse como linea lateral.
+
+## Como trabajar con la repo
+
+Flujo recomendado:
+
+1. Descargar manualmente los datasets en `data/raw/`
 2. Activar el entorno de trabajo
-3. Abrir el notebook y ejecutarlo de arriba a abajo
+3. Ejecutar el notebook que corresponda a la fase que quieras revisar
+
+Orden sugerido:
+
+1. `notebooks/pose_benchmark/01_pose_benchmark_ergonomia.ipynb`
+2. `notebooks/ergonomics/02_pipeline_ergonomico_base.ipynb`
+3. `notebooks/ergonomics/03_pipeline_ergonomico_long_run.ipynb`
+4. `notebooks/ergonomics/04_auditoria_frontal_y_calibracion.ipynb`
 
 Dependencias principales:
 
 - `opencv-python`
 - `mediapipe`
-- `ultralytics`
 - `tensorflow`
 - `tensorflow-hub`
+- `ultralytics`
 - `pandas`
+- `matplotlib`
 - `tqdm`
+- `jupytext`
+- `nbclient`
 
-## Datos y archivos generados
+## Artefactos generados
 
 La repo esta configurada para no versionar:
 
 - datasets descargados
 - subsets generados
-- pesos de modelos descargados
+- modelos descargados
 - resultados del benchmark
+- resultados de `notebooks/ergonomics/results/`
 - caches de Python
 
-Esto permite mantener Git limpio y dejar solo codigo, notebooks y documentacion.
+Esto permite dejar en Git el codigo, los notebooks y la documentacion, pero no los artefactos pesados o regenerables.
 
-## Siguiente paso
+## Siguiente paso recomendado
 
-Tras esta comparativa inicial, los siguientes pasos serán:
+El siguiente paso tecnico con mas sentido ya no es comparar mas modelos, sino recalibrar el motor de reglas frontal:
 
-- repetir el benchmark sobre un segundo dataset de validacion
-- revisar fallos visuales por clase
-- elegir modelo principal y modelo de respaldo
-- empezar a convertir keypoints en reglas ergonomicas interpretables
+- bajar el peso o sacar de la decision frontal a `trunk_status`
+- revisar el uso de angulos de codo mientras muñeca y antebrazo sigan fuera de plano
+- recalibrar umbrales de cabeza y hombros apoyandose en la auditoria del dataset base
+- dejar la linea lateral como extension documentada para cabeza adelantada y espalda completa
