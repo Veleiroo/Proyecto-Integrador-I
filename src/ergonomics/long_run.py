@@ -15,18 +15,28 @@ from .reporting import (
     save_dataframe,
 )
 
+# --- UTILIDADES DE INTERFAZ ---
 
 def progress(iterable, **kwargs):
+    """
+    Envuelve un iterable con una barra de progreso (tqdm).
+    Si la librería tqdm no está instalada, devuelve el iterable normal 
+    para no romper la ejecución.
+    """
     try:
         from tqdm import tqdm
-
         return tqdm(iterable, **kwargs)
     except Exception:
         return iterable
 
+# --- GESTIÓN DE RESULTADOS (ARTEFACTOS) ---
 
 @dataclass(frozen=True)
 class LongRunArtifacts:
+    """
+    Estructura de datos que rastrea todas las rutas de salida de una 'Gran Ejecución'.
+    Centraliza dónde se guardan los landmarks, el análisis y los informes finales.
+    """
     output_dir: Path
     manifest_path: Path
     pose_path: Path
@@ -36,8 +46,16 @@ class LongRunArtifacts:
     metric_summary_path: Path
     processed_images: int
 
+# --- LÓGICA DE PERSISTENCIA INCREMENTAL ---
+# Estas funciones permiten que el sistema no pierda datos si se corta la luz 
+# o se cierra el programa, ya que escriben en el disco paso a paso.
 
 def _append_rows(path: Path, rows: list[dict]) -> None:
+    """
+    Escribe filas en un CSV de forma incremental (modo 'append').
+    Si el archivo no existe, escribe la cabecera; si existe, solo añade los datos.
+    Esto evita cargar todo en RAM, permitiendo procesar datasets gigantescos.
+    """
     if not rows:
         return
     frame = pd.DataFrame(rows)
@@ -46,9 +64,15 @@ def _append_rows(path: Path, rows: list[dict]) -> None:
 
 
 def _load_processed_image_paths(path: Path) -> set[str]:
+    """
+    SISTEMA DE CHECKPOINT (Punto de control):
+    Lee el archivo de resultados actual para saber qué imágenes ya han sido procesadas.
+    Devuelve un 'set' para una búsqueda ultra rápida.
+    """
     if not path.exists():
         return set()
     try:
+        # Solo leemos la columna de rutas para ahorrar memoria
         existing = pd.read_csv(path, usecols=["image_path"])
     except Exception:
         return set()
@@ -56,6 +80,7 @@ def _load_processed_image_paths(path: Path) -> set[str]:
 
 
 def _load_dataframe(path: Path) -> pd.DataFrame:
+    """Carga de seguridad de un DataFrame desde CSV."""
     if not path.exists():
         return pd.DataFrame()
     return pd.read_csv(path)
@@ -64,13 +89,18 @@ def _load_dataframe(path: Path) -> pd.DataFrame:
 def run_incremental_long_pipeline(
     records_df: pd.DataFrame,
     *,
-    run_label: str,
-    pose_config: MediaPipePoseConfig,
-    visibility_threshold: float = 0.35,
-    checkpoint_every: int = 100,
-    resume: bool = True,
+    run_label: str,                     # Nombre de la carpeta de resultados (ej: "test_inicial")
+    pose_config: MediaPipePoseConfig,    # Configuración de la IA
+    visibility_threshold: float = 0.35, # Confianza mínima para los puntos clave
+    checkpoint_every: int = 100,        # Guardar en disco cada 100 imágenes
+    resume: bool = True,                # Si es True, no repite lo que ya está hecho
     output_root: Path = ERGONOMICS_RESULTS_DIR,
 ) -> LongRunArtifacts:
+    """
+    Ejecuta el pipeline completo de detección y análisis ergonómico sobre un dataset.
+    Está diseñado para ser eficiente en memoria y permitir la recuperación ante fallos.
+    """
+    # 1. PREPARACIÓN DE DIRECTORIOS Y MANIFIESTO
     output_dir = output_root / run_label
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -81,14 +111,18 @@ def run_incremental_long_pipeline(
     group_status_summary_path = output_dir / "group_status_summary.csv"
     metric_summary_path = output_dir / "metric_summary_by_group.csv"
 
+    # Guardamos el registro de qué imágenes vamos a procesar originalmente
     records_df = records_df.copy()
     records_df["image_path"] = records_df["image_path"].astype(str)
     save_dataframe(records_df, manifest_path)
 
+    # 2. LÓGICA DE REANUDACIÓN (RESUME)
     if resume:
+        # Cargamos lo que ya se hizo para no repetirlo
         processed = _load_processed_image_paths(pose_path)
         pending_df = records_df[~records_df["image_path"].isin(processed)].copy()
     else:
+        # Si no reanudamos, borramos archivos previos para empezar de cero
         pending_df = records_df.copy()
         for path in [pose_path, analysis_path, status_summary_path, group_status_summary_path, metric_summary_path]:
             if path.exists():
@@ -97,33 +131,45 @@ def run_incremental_long_pipeline(
     pose_rows: list[dict] = []
     analysis_rows: list[dict] = []
 
+    # 3. BUCLE PRINCIPAL DE PROCESAMIENTO
+    # Usamos un context manager para asegurar que el modelo se cierra correctamente
     with MediaPipePoseEstimator(config=pose_config) as estimator:
         for item in progress(
             pending_df.to_dict(orient="records"),
             total=len(pending_df),
             desc="Long run ergonomico",
         ):
+            # A. Inferencia: La IA busca el esqueleto
             pose_row = estimator.infer_image(
                 item["image_path"],
                 metadata={"group": item.get("group"), "split": item.get("split")},
             )
+            
+            # B. Análisis: Calculamos ángulos y estados ergonómicos
             analysis_row = analyze_pose_row(
                 pose_row,
                 visibility_threshold=visibility_threshold,
             )
+            
             pose_rows.append(pose_row)
             analysis_rows.append(analysis_row)
 
+            # 4. GUARDADO INCREMENTAL (CHECKPOINTING)
+            # Si acumulamos suficientes filas, escribimos en disco y vaciamos la RAM
             if len(pose_rows) >= checkpoint_every:
                 _append_rows(pose_path, pose_rows)
                 _append_rows(analysis_path, analysis_rows)
                 pose_rows.clear()
                 analysis_rows.clear()
 
+    # Escribimos los restos finales que quedaron después del último checkpoint
     _append_rows(pose_path, pose_rows)
     _append_rows(analysis_path, analysis_rows)
 
+    # 5. GENERACIÓN DE INFORMES FINALES (REPORTING)
+    # Una vez procesado todo, cargamos los resultados para generar estadísticas globales
     analysis_df = _load_dataframe(analysis_path)
+    
     status_summary_df = build_status_summary(analysis_df)
     group_status_summary_df = build_group_status_summary(analysis_df)
     metric_summary_df = build_metric_summary_by_group(
@@ -139,10 +185,12 @@ def run_incremental_long_pipeline(
         ],
     )
 
+    # Guardamos los informes estadísticos
     save_dataframe(status_summary_df, status_summary_path)
     save_dataframe(group_status_summary_df, group_status_summary_path)
     save_dataframe(metric_summary_df, metric_summary_path)
 
+    # Devolvemos un objeto con todas las rutas y el conteo final de éxito
     return LongRunArtifacts(
         output_dir=output_dir,
         manifest_path=manifest_path,
