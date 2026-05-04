@@ -79,7 +79,7 @@ System validation will rigorously test the accuracy of the Posture Issue Classif
 ### Current Data Sources
 The team currently has access to the following public datasets:
 * [Roboflow: sitting-posture-rofqf](https://universe.roboflow.com/ikornproject/sitting-posture-rofqf) *(Raw Images)*
-This dataset has classes Good and Bad. Images are side view. 273 images. Not so interesting.
+This dataset has classes Good and Bad. Images are side view. 273 images. This is the best for side view.
 
 * [Roboflow: sitting-posture-ezkda](https://universe.roboflow.com/dataset-sqm0h/sitting-posture-ezkda) *(Raw Images)*
 This dataset has classes backbadposture forwardbadposture and goodposture. Images are sideview but with slightly different angels. 938 images. Not so interesting.

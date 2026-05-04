@@ -13,9 +13,13 @@ python -m venv .venv
 4. Update pip:
 python -m pip install --upgrade pip
 
-5. Install the dependencies from the requirements file (this takes about 20' to finish the first time it is executed in the venv):
+5. Install the dependencies from the requirements file (this takes about 30' to finish the first time it is executed in the venv):
 pip install -r requirements.txt
 
 # Baseline
 
 We are going to use as a baseline a pretrained model. The system that uses it is in baselines\roboflow. It was downloaded from roboflow:posture_correction_v4.
+
+# sideView
+
+This folder contains the code which we used to determine the best pose estimation model for the side view images.

@@ -30,3 +30,9 @@ test_images/
 
 # Datasets
 datasets/
+
+# Models
+models/
+
+# Guide for development
+guide/
