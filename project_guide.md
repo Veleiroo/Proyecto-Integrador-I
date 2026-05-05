@@ -16,13 +16,13 @@ To prevent computational bottlenecks and ensure smooth system performance withou
 To optimize the keypoint extraction model, the development team will evaluate three camera topologies. The final design will be selected based on the best balance of simplicity and feature extraction performance:
 * **Option 1 (Front View):** Utilizes a standard laptop webcam. Only frontal images will be processed.
 * **Option 2 (Side View):** Utilizes a profile/sagittal camera angle. Only side-view images will be processed.
-* **Option 3 (Stereo View):** Simultaneous capture using both front and side cameras.
+* **Option 3 (Stereo View):** Simultaneous capture using both front and side cameras. Simultaneous capture using both front and side cameras was chosen.
 
 ### 2.2. Keypoint Detection (Pose Estimation)
 The system will utilize an AI model to extract spatial coordinates of critical anatomical joints. The team will benchmark the following models to determine the optimal balance between high joint-recognition accuracy and low computational overhead:
 * **YOLO Pose**
 * **MoveNet**
-* **MediaPipe Pose**
+* **MediaPipe Pose** MediaPipe Pose was chosen both for front and side view images.
 
 Only some keypoints will be considered.
 > **⚠️ ACTION REQUIRED: Keypoint selection**
