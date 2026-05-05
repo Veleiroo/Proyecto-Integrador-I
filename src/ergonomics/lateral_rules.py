@@ -152,8 +152,9 @@ def extract_lateral_posture_metrics(row: dict | pd.Series, visibility_threshold:
 
 def evaluate_lateral_posture_metrics(metrics: dict) -> dict:
     """
-    Reglas laterales iniciales, pensadas para calibrarse con auditoria visual.
-    Miden cabeza adelantada, cuello/tronco en perfil y angulo de codo si la muneca aparece.
+    Reglas laterales calibradas parcialmente con MultiPosture.
+    MultiPosture valida umbrales de tronco; cabeza/cuello se mantienen como senal auxiliar
+    hasta disponer de etiquetas expertas especificas de cabeza adelantada.
     """
     head_offset_status = _severity_from_max(
         metrics.get("head_forward_offset_ratio"),
@@ -172,13 +173,13 @@ def evaluate_lateral_posture_metrics(metrics: dict) -> dict:
 
     trunk_tilt_status = _severity_from_max(
         metrics.get("trunk_forward_tilt_deg"),
-        adequate_max=8.0,
-        improvable_max=15.0,
+        adequate_max=7.2,
+        improvable_max=8.7,
     )
     shoulder_hip_status = _severity_from_max(
         metrics.get("shoulder_hip_offset_ratio"),
-        adequate_max=0.14,
-        improvable_max=0.28,
+        adequate_max=0.12,
+        improvable_max=0.15,
     )
     trunk_status = max(
         [trunk_tilt_status, shoulder_hip_status],
@@ -205,9 +206,9 @@ def evaluate_lateral_posture_metrics(metrics: dict) -> dict:
     available_statuses = [
         status
         for key, status in statuses.items()
-        if key in {"head_neck_status", "trunk_status", "lateral_elbow_status"} and status != "insufficient_data"
+        if key in {"trunk_status", "lateral_elbow_status"} and status != "insufficient_data"
     ]
-    if len(available_statuses) < 2:
+    if not available_statuses:
         overall_status = "insufficient_data"
     else:
         overall_status = max(available_statuses, key=lambda item: SEVERITY_ORDER[item])

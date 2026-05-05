@@ -47,6 +47,8 @@ Los datasets se resuelven desde `src/ergonomics/datasets.py`.
   Dataset principal del MVP. Webcam frontal. Es el mas cercano al caso real del proyecto.
 - `sitting_posture_4keypoint`
   Dataset mas lateral. Buen candidato para validar una futura extension de perfil.
+- `multiposture_zenodo_14230872`
+  Dataset de keypoints 3D, sin imagenes, con etiquetas expertas de postura sentada. Es mejor candidato para calibrar reglas laterales de tronco que los datasets visuales `Good/Bad`.
 - `desk_posture_coco_v1`
   Dataset pequeno, tambien util para contraste lateral o dorsal.
 - `posture_detection_folder_v1`
@@ -104,6 +106,8 @@ El pipeline modular esta en `src/ergonomics/`:
   Auditoria de etiquetas, falsos positivos y candidatos de recalibracion para el caso frontal.
 - `notebooks/ergonomics/05_pipeline_lateral_yolo.ipynb`
   Primera validacion del flujo lateral `imagen de perfil -> YOLO Pose -> variables laterales -> reglas -> feedback`.
+- `notebooks/ergonomics/06_calibracion_lateral_multiposture.ipynb`
+  Calibracion de variables laterales usando keypoints 3D y etiquetas expertas de MultiPosture.
 
 ### Variables que ya se calculan
 
@@ -146,6 +150,8 @@ La corrida larga ya ejecutada sobre `posture_correction_v4_folder_v1` confirma v
 - La auditoria actual apunta a que `shoulder_height_diff_ratio` esta siendo demasiado estricto para este dataset.
 - La medicion de cabeza adelantada no queda bien resuelta con este encuadre frontal y debe tratarse como linea lateral.
 - El dataset `sitting_posture_4keypoint` es el candidato principal para perfil porque contiene imagenes laterales de escritorio con clases `Good` y `Bad`.
+- Las etiquetas `Good` y `Bad` de los datasets laterales visuales no deben tomarse como verdad ROSA. MultiPosture aporta una referencia mas fiable para calibrar tronco.
+- Tras recalibrar tronco con MultiPosture, la corrida lateral queda mas informativa: `Bad` concentra mas riesgo que `Good`, mientras cabeza/cuello se mantiene como señal auxiliar pendiente de un dataset especifico.
 
 ## Como trabajar con la repo
 
@@ -162,6 +168,7 @@ Orden sugerido:
 3. `notebooks/ergonomics/03_pipeline_ergonomico_long_run.ipynb`
 4. `notebooks/ergonomics/04_auditoria_frontal_y_calibracion.ipynb`
 5. `notebooks/ergonomics/05_pipeline_lateral_yolo.ipynb`
+6. `notebooks/ergonomics/06_calibracion_lateral_multiposture.ipynb`
 
 Dependencias principales:
 
@@ -195,5 +202,5 @@ El siguiente paso tecnico con mas sentido es ejecutar y auditar la extension lat
 
 - ejecutar `05_pipeline_lateral_yolo.ipynb` sobre el dataset lateral completo
 - revisar visualmente casos `Good` y `Bad` clasificados como `risk` o `improvable`
-- recalibrar umbrales laterales de cabeza, cuello y tronco
+- usar `06_calibracion_lateral_multiposture.ipynb` para recalibrar umbrales laterales de tronco
 - integrar despues la decision frontal + lateral en una lectura ergonomica conjunta

@@ -300,3 +300,60 @@ def run_incremental_lateral_yolo_pipeline(
         metric_summary_path=metric_summary_path,
         processed_images=len(analysis_df),
     )
+
+
+def rebuild_lateral_analysis_from_pose_artifacts(
+    run_label: str,
+    *,
+    visibility_threshold: float = 0.3,
+    output_root: Path = ERGONOMICS_RESULTS_DIR,
+    analysis_filename: str = "ergonomic_analysis.csv",
+) -> LongRunArtifacts:
+    """
+    Recalcula reglas laterales desde landmarks ya guardados.
+    Permite probar umbrales nuevos sin repetir inferencia YOLO.
+    """
+    output_dir = output_root / run_label
+    manifest_path = output_dir / "execution_manifest.csv"
+    pose_path = output_dir / "pose_landmarks.csv"
+    analysis_path = output_dir / analysis_filename
+    status_summary_path = output_dir / "status_summary.csv"
+    group_status_summary_path = output_dir / "group_status_summary.csv"
+    metric_summary_path = output_dir / "metric_summary_by_group.csv"
+
+    pose_df = _load_dataframe(pose_path)
+    analysis_df = pd.DataFrame(
+        [
+            analyze_lateral_pose_row(row, visibility_threshold=visibility_threshold)
+            for row in pose_df.to_dict(orient="records")
+        ]
+    )
+    save_dataframe(analysis_df, analysis_path)
+
+    status_summary_df = build_status_summary(analysis_df)
+    group_status_summary_df = build_group_status_summary(analysis_df)
+    metric_summary_df = build_metric_summary_by_group(
+        analysis_df,
+        metrics=[
+            "head_forward_offset_ratio",
+            "neck_forward_tilt_deg",
+            "trunk_forward_tilt_deg",
+            "shoulder_hip_offset_ratio",
+            "lateral_elbow_angle_deg",
+        ],
+    )
+
+    save_dataframe(status_summary_df, status_summary_path)
+    save_dataframe(group_status_summary_df, group_status_summary_path)
+    save_dataframe(metric_summary_df, metric_summary_path)
+
+    return LongRunArtifacts(
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        pose_path=pose_path,
+        analysis_path=analysis_path,
+        status_summary_path=status_summary_path,
+        group_status_summary_path=group_status_summary_path,
+        metric_summary_path=metric_summary_path,
+        processed_images=len(analysis_df),
+    )

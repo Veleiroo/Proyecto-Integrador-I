@@ -74,6 +74,13 @@ DATASET_CATALOG: dict[str, DatasetSpec] = {
         local_dir_name="pablos_posture_correction_v4_folder_v1",
         source_format="folder",
     ),
+    "multiposture_zenodo_14230872": DatasetSpec(
+        key="multiposture_zenodo_14230872",
+        label="MultiPosture keypoints",
+        notes="Keypoints 3D de postura sentada con etiquetas de tronco validadas por expertos. No incluye imagenes.",
+        local_dir_name="multiposture_zenodo_14230872",
+        source_format="keypoints_csv",
+    ),
 }
 
 # --- LÓGICA DE RESOLUCIÓN DE RUTAS ---
@@ -108,7 +115,10 @@ def resolve_dataset_root(dataset_key: str) -> Path | None:
     Localiza la carpeta raíz 'real' de un dataset.
     Resuelve el problema de las subcarpetas anidadas que a veces generan los unzip.
     """
-    base_dir = get_dataset_spec(dataset_key).local_dir
+    spec = get_dataset_spec(dataset_key)
+    base_dir = spec.local_dir
+    if spec.source_format == "keypoints_csv":
+        return base_dir if (base_dir / "data.csv").exists() else None
     
     # Si la base ya parece ser la raíz, la devolvemos
     if looks_like_dataset_root(base_dir):
@@ -212,6 +222,8 @@ def collect_image_records(dataset_key: str) -> list[dict]:
     dataset_root = resolve_dataset_root(dataset_key)
     if dataset_root is None:
         return []
+    if get_dataset_spec(dataset_key).source_format == "keypoints_csv":
+        return []
 
     # Ajuste para datasets que vienen dentro de una subcarpeta 'images'
     source_root = dataset_root / "images" if (dataset_root / "images").exists() else dataset_root
@@ -250,6 +262,15 @@ def summarize_available_datasets():
     for dataset_key, spec in DATASET_CATALOG.items():
         dataset_root = resolve_dataset_root(dataset_key)
         records = collect_image_records(dataset_key)
+
+        keypoint_rows = 0
+        if spec.source_format == "keypoints_csv":
+            csv_path = spec.local_dir / "data.csv"
+            if csv_path.exists():
+                try:
+                    keypoint_rows = len(pd.read_csv(csv_path, usecols=["upperbody_label"]))
+                except Exception:
+                    keypoint_rows = 0
         
         # Extraemos grupos y splits únicos presentes en los archivos
         groups = sorted({record["group"] for record in records})
@@ -260,9 +281,9 @@ def summarize_available_datasets():
                 "dataset_key": dataset_key,
                 "label": spec.label,
                 "format": spec.source_format,
-                "is_available": dataset_root is not None,
+                "is_available": dataset_root is not None or keypoint_rows > 0,
                 "dataset_root": str(dataset_root) if dataset_root else None,
-                "total_images": len(records),
+                "total_images": len(records) if spec.source_format != "keypoints_csv" else keypoint_rows,
                 "split_count": len(splits),
                 "group_count": len(groups),
                 "notes": spec.notes,

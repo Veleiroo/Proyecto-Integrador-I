@@ -1,6 +1,6 @@
 tmp/
 notebooks/pose_benchmark/01_pose_benchmark_ergonomia.py
-ergonomics/*.py
+notebooks/ergonomics/*.py
 
 
 # Python cache
