@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -131,11 +132,43 @@ def list_image_files(root: Path) -> list[Path]:
         path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
     )
 
+
+def load_coco_group_lookup(dataset_root: Path) -> dict[str, str]:
+    """
+    Lee las etiquetas de los datasets COCO descargados por Roboflow.
+    Devuelve un mapa filename -> categoria para no perder las clases Good/Bad
+    cuando las imagenes estan directamente dentro de train/valid/test.
+    """
+    lookup: dict[str, str] = {}
+    for annotation_path in sorted(dataset_root.rglob("_annotations.coco.json")):
+        try:
+            payload = json.loads(annotation_path.read_text())
+        except Exception:
+            continue
+
+        categories = {
+            int(category["id"]): str(category.get("name", category["id"]))
+            for category in payload.get("categories", [])
+            if "id" in category
+        }
+        images = {
+            int(image["id"]): str(image.get("file_name", ""))
+            for image in payload.get("images", [])
+            if "id" in image
+        }
+
+        for annotation in payload.get("annotations", []):
+            image_name = images.get(int(annotation.get("image_id", -1)))
+            category_name = categories.get(int(annotation.get("category_id", -1)))
+            if image_name and category_name:
+                lookup[Path(image_name).name] = category_name
+    return lookup
+
 # --- INFERENCIA AUTOMÁTICA DE METADATOS ---
 # Estas funciones evitan tener que escribir archivos de etiquetas a mano; 
 # el programa "aprende" la etiqueta mirando la estructura de carpetas.
 
-def infer_group(image_path: Path, source_root: Path) -> str:
+def infer_group(image_path: Path, source_root: Path, coco_group_lookup: dict[str, str] | None = None) -> str:
     """
     Determina a qué grupo de postura pertenece la imagen (ej: 'adecuada', 'riesgo')
     analizando la ruta relativa del archivo. Soporta estructuras tipo Roboflow.
@@ -143,6 +176,9 @@ def infer_group(image_path: Path, source_root: Path) -> str:
     relative = image_path.relative_to(source_root)
     parts = relative.parts
     split_names = {"train", "valid", "test"}
+
+    if coco_group_lookup and image_path.name in coco_group_lookup:
+        return coco_group_lookup[image_path.name]
 
     # Caso 1: Estructura Roboflow (train/clase/imagen.jpg)
     if len(parts) >= 3 and parts[0].lower() in split_names and parts[1].lower() not in {"images", "labels"}:
@@ -179,12 +215,13 @@ def collect_image_records(dataset_key: str) -> list[dict]:
 
     # Ajuste para datasets que vienen dentro de una subcarpeta 'images'
     source_root = dataset_root / "images" if (dataset_root / "images").exists() else dataset_root
+    coco_group_lookup = load_coco_group_lookup(dataset_root)
     records = []
     for image_path in list_image_files(source_root):
         records.append(
             {
                 "image_path": image_path,
-                "group": infer_group(image_path, source_root),
+                "group": infer_group(image_path, source_root, coco_group_lookup),
                 "split": infer_split(image_path, source_root) or "unspecified",
             }
         )

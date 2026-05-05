@@ -13,17 +13,19 @@ La documentacion de referencia esta en `Documentación/`:
 
 ## Estado actual
 
-La repo ya no esta solo en fase de benchmark. Ahora mismo hay dos bloques de trabajo:
+La repo ya no esta solo en fase de benchmark. Ahora mismo hay tres bloques de trabajo:
 
 1. Benchmark de modelos de pose
 2. Pipeline ergonomico modular sobre el caso de webcam frontal
+3. Extension lateral para medir cabeza adelantada y tronco en perfil
 
 ### Decisiones tecnicas tomadas
 
 - `MediaPipe Pose` es el modelo principal para el caso frontal actual.
-- `MoveNet` queda como respaldo si mas adelante interesa explorar otra relacion precision/latencia.
+- `YOLO Pose` es el modelo elegido para vista lateral porque el benchmark de perfil da mejor cobertura de keypoints y mas imagenes listas para analisis lateral.
+- `MoveNet` queda descartado para lateral por baja disponibilidad de keypoints utiles.
 - El MVP actual se centra en tren superior frontal: cabeza, cuello y simetria de hombros.
-- El analisis de cabeza adelantada y espalda completa queda mejor planteado como extension lateral, no como requisito del MVP frontal.
+- El analisis de cabeza adelantada y tronco queda planteado como extension lateral, no como requisito del MVP frontal.
 
 ## Estructura
 
@@ -73,8 +75,8 @@ Que hace:
 Resultado practico de esta fase:
 
 - `MediaPipe Pose` sale como opcion principal para el dataset frontal base
-- `YOLO Pose` no compensa para este caso
-- `MoveNet` es util como contraste, pero queda por detras en cobertura ergonomica de tren superior
+- `YOLO Pose` no compensa para el caso frontal, pero si gana en la comparativa lateral
+- `MoveNet` es util como contraste, pero queda por detras en cobertura ergonomica de tren superior y lateral
 
 ## Pipeline ergonomico
 
@@ -84,7 +86,9 @@ El pipeline modular esta en `src/ergonomics/`:
 - `datasets.py`
 - `sampling.py`
 - `pose_inference.py`
+- `yolo_pose_inference.py`
 - `posture_rules.py`
+- `lateral_rules.py`
 - `reporting.py`
 - `visualization.py`
 - `long_run.py`
@@ -98,6 +102,8 @@ El pipeline modular esta en `src/ergonomics/`:
   Corrida larga y reanudable sobre un lote grande o el dataset completo.
 - `notebooks/ergonomics/04_auditoria_frontal_y_calibracion.ipynb`
   Auditoria de etiquetas, falsos positivos y candidatos de recalibracion para el caso frontal.
+- `notebooks/ergonomics/05_pipeline_lateral_yolo.ipynb`
+  Primera validacion del flujo lateral `imagen de perfil -> YOLO Pose -> variables laterales -> reglas -> feedback`.
 
 ### Variables que ya se calculan
 
@@ -118,6 +124,18 @@ Estas variables se traducen a estados:
 - `risk`
 - `insufficient_data`
 
+### Variables laterales iniciales
+
+Para la vista de perfil, el motor lateral mide:
+
+- `head_forward_offset_ratio`
+- `neck_forward_tilt_deg`
+- `trunk_forward_tilt_deg`
+- `shoulder_hip_offset_ratio`
+- `lateral_elbow_angle_deg`
+
+La vista lateral no exige ver ambos lados del cuerpo. El sistema escoge el lado con mejor cadena visible: nariz, hombro, codo y cadera.
+
 ## Hallazgos actuales
 
 La corrida larga ya ejecutada sobre `posture_correction_v4_folder_v1` confirma varias cosas:
@@ -127,6 +145,7 @@ La corrida larga ya ejecutada sobre `posture_correction_v4_folder_v1` confirma v
 - El grupo `looks good` esta cayendo demasiado en `risk`, lo que indica que hay umbrales por recalibrar.
 - La auditoria actual apunta a que `shoulder_height_diff_ratio` esta siendo demasiado estricto para este dataset.
 - La medicion de cabeza adelantada no queda bien resuelta con este encuadre frontal y debe tratarse como linea lateral.
+- El dataset `sitting_posture_4keypoint` es el candidato principal para perfil porque contiene imagenes laterales de escritorio con clases `Good` y `Bad`.
 
 ## Como trabajar con la repo
 
@@ -142,6 +161,7 @@ Orden sugerido:
 2. `notebooks/ergonomics/02_pipeline_ergonomico_base.ipynb`
 3. `notebooks/ergonomics/03_pipeline_ergonomico_long_run.ipynb`
 4. `notebooks/ergonomics/04_auditoria_frontal_y_calibracion.ipynb`
+5. `notebooks/ergonomics/05_pipeline_lateral_yolo.ipynb`
 
 Dependencias principales:
 
@@ -171,9 +191,9 @@ Esto permite dejar en Git el codigo, los notebooks y la documentacion, pero no l
 
 ## Siguiente paso recomendado
 
-El siguiente paso tecnico con mas sentido ya no es comparar mas modelos, sino recalibrar el motor de reglas frontal:
+El siguiente paso tecnico con mas sentido es ejecutar y auditar la extension lateral:
 
-- bajar el peso o sacar de la decision frontal a `trunk_status`
-- revisar el uso de angulos de codo mientras muñeca y antebrazo sigan fuera de plano
-- recalibrar umbrales de cabeza y hombros apoyandose en la auditoria del dataset base
-- dejar la linea lateral como extension documentada para cabeza adelantada y espalda completa
+- ejecutar `05_pipeline_lateral_yolo.ipynb` sobre el dataset lateral completo
+- revisar visualmente casos `Good` y `Bad` clasificados como `risk` o `improvable`
+- recalibrar umbrales laterales de cabeza, cuello y tronco
+- integrar despues la decision frontal + lateral en una lectura ergonomica conjunta

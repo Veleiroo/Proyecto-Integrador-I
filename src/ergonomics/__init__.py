@@ -47,6 +47,7 @@ from .datasets import (
 
 # --- Módulo de Ejecución Larga (Long Run): Procesamiento por lotes incremental ---
 from .long_run import LongRunArtifacts, run_incremental_long_pipeline
+from .long_run import run_incremental_lateral_yolo_pipeline
 
 # --- Módulo de Rutas: Gestión centralizada de directorios y archivos del sistema ---
 from .paths import (
@@ -55,6 +56,7 @@ from .paths import (
     POSE_BENCHMARK_RESULTS_DIR,
     PROJECT_ROOT,
     RAW_DATA_DIR,
+    YOLO_POSE_WEIGHTS_PATH,
 )
 
 # --- Módulo de Inferencia: El motor de detección de pose (MediaPipe) ---
@@ -71,6 +73,14 @@ from .posture_rules import (
     analyze_pose_row,
     evaluate_posture_metrics,
     extract_posture_metrics,
+)
+
+# --- Módulo de Reglas Laterales: análisis de perfil con YOLO Pose ---
+from .lateral_rules import (
+    analyze_lateral_pose_dataframe,
+    analyze_lateral_pose_row,
+    evaluate_lateral_posture_metrics,
+    extract_lateral_posture_metrics,
 )
 
 # --- Módulo de Reportes: Generación de estadísticas y guardado de resultados ---
@@ -94,6 +104,14 @@ from .visualization import (
     plot_status_distribution,
 )
 
+# --- Módulo de Inferencia YOLO: extracción de landmarks para vista lateral ---
+from .yolo_pose_inference import (
+    YOLO_LANDMARK_IDS,
+    YoloPoseConfig,
+    YoloPoseEstimator,
+    run_yolo_pose_batch,
+)
+
 # --- EXPOSICIÓN DE LA API PÚBLICA ---
 # La lista __all__ define qué elementos se exportan cuando alguien hace 
 # 'from ergonomics import *'. Asegura la encapsulación del código.
@@ -114,6 +132,12 @@ __all__ = [
     "PROJECT_ROOT",
     "RAW_DATA_DIR",
     "RunAuditTables",
+    "YOLO_LANDMARK_IDS",
+    "YOLO_POSE_WEIGHTS_PATH",
+    "YoloPoseConfig",
+    "YoloPoseEstimator",
+    "analyze_lateral_pose_dataframe",
+    "analyze_lateral_pose_row",
     "analyze_pose_dataframe",
     "analyze_pose_row",
     "build_component_status_summary",
@@ -128,6 +152,8 @@ __all__ = [
     "collect_image_records_df",
     "draw_pose_overlay",
     "evaluate_posture_metrics",
+    "evaluate_lateral_posture_metrics",
+    "extract_lateral_posture_metrics",
     "extract_posture_metrics",
     "load_benchmark_artifacts",
     "plot_dataset_group_distribution",
@@ -141,7 +167,9 @@ __all__ = [
     "plot_status_distribution",
     "rank_models",
     "run_incremental_long_pipeline",
+    "run_incremental_lateral_yolo_pipeline",
     "run_mediapipe_pose_batch",
+    "run_yolo_pose_batch",
     "save_dataframe",
     "load_run_audit_tables",
     "merge_pose_analysis",

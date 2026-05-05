@@ -1,9 +1,10 @@
 tmp/
 notebooks/pose_benchmark/01_pose_benchmark_ergonomia.py
+ergonomics/*.py
+
 
 # Python cache
 __pycache__/
-*.py[cod]
 .ipynb_checkpoints/
 
 # Local datasets and generated subsets
@@ -17,5 +18,3 @@ models/mediapipe/
 # Notebook outputs
 notebooks/pose_benchmark/results/
 notebooks/ergonomics/results/
-.codex
-.codex/

@@ -58,6 +58,9 @@ def empty_pose_metrics(model_name: str, runtime_ms: float, backend: str) -> dict
         "right_elbow_ready": False,
         "upper_limb_ready": False,
         "upper_body_ready": False,
+        "side_left_chain_ready": False,
+        "side_right_chain_ready": False,
+        "side_view_ready": False,
         "full_ergonomic_ready": False,
         "ergonomic_ready": False,
         "can_measure_core_angles": False,
@@ -81,6 +84,9 @@ def compute_pose_support(required_scores: dict[str, float], threshold: float = 0
     right_elbow_ready = has("right_shoulder", "right_elbow")
     upper_limb_ready = left_elbow_ready or right_elbow_ready
     upper_body_ready = neck_ready and upper_limb_ready
+    side_left_chain_ready = has("nose", "left_shoulder", "left_elbow", "left_hip")
+    side_right_chain_ready = has("nose", "right_shoulder", "right_elbow", "right_hip")
+    side_view_ready = side_left_chain_ready or side_right_chain_ready
     full_ergonomic_ready = upper_body_ready and trunk_ready
 
     return {
@@ -92,9 +98,12 @@ def compute_pose_support(required_scores: dict[str, float], threshold: float = 0
         "right_elbow_ready": right_elbow_ready,
         "upper_limb_ready": upper_limb_ready,
         "upper_body_ready": upper_body_ready,
+        "side_left_chain_ready": side_left_chain_ready,
+        "side_right_chain_ready": side_right_chain_ready,
+        "side_view_ready": side_view_ready,
         "full_ergonomic_ready": full_ergonomic_ready,
         "ergonomic_ready": upper_body_ready,
-        "can_measure_core_angles": upper_body_ready,
+        "can_measure_core_angles": upper_body_ready or side_view_ready,
     }
 
 
@@ -254,6 +263,9 @@ def run_yolo_batch(
                 "right_elbow_ready": False,
                 "upper_limb_ready": False,
                 "upper_body_ready": False,
+                "side_left_chain_ready": False,
+                "side_right_chain_ready": False,
+                "side_view_ready": False,
                 "full_ergonomic_ready": False,
                 "ergonomic_ready": False,
                 "can_measure_core_angles": False,
@@ -352,6 +364,9 @@ def run_movenet_batch(
                 "right_elbow_ready": False,
                 "upper_limb_ready": False,
                 "upper_body_ready": False,
+                "side_left_chain_ready": False,
+                "side_right_chain_ready": False,
+                "side_view_ready": False,
                 "full_ergonomic_ready": False,
                 "ergonomic_ready": False,
                 "can_measure_core_angles": False,
@@ -445,6 +460,9 @@ def run_mediapipe_batch(
                     "right_elbow_ready": False,
                     "upper_limb_ready": False,
                     "upper_body_ready": False,
+                    "side_left_chain_ready": False,
+                    "side_right_chain_ready": False,
+                    "side_view_ready": False,
                     "full_ergonomic_ready": False,
                     "ergonomic_ready": False,
                     "can_measure_core_angles": False,
