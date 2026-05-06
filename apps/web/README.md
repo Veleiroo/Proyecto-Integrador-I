@@ -9,7 +9,7 @@ La pantalla principal permite comprobar la camara, validar encuadre e iniciar un
 Desde la raiz del repositorio:
 
 ```bash
-python -m pip install -r requirements-api.txt
+python -m pip install -r requirements.txt
 ```
 
 Para Windows:
