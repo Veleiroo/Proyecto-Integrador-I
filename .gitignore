@@ -23,3 +23,10 @@ notebooks/ergonomics/results/
 # Web app local artifacts
 apps/web/node_modules/
 apps/web/dist/
+
+# VSCode Specific
+.vscode/
+
+# Environments
+.env
+.venv/
