@@ -6,6 +6,8 @@ La pantalla principal permite comprobar la camara, validar encuadre e iniciar un
 
 ## Desarrollo local
 
+Es recomendable el uso de un entorno virtual. En SETUP.md se detalla como crearlo.
+
 Desde la raiz del repositorio:
 
 ```bash
