@@ -10,6 +10,16 @@ Desde la raiz del repositorio:
 
 ```bash
 python -m pip install -r requirements-api.txt
+```
+
+Para Windows:
+```bash
+$env:PYTHONPATH = "src"
+uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
+```
+
+Para Linux and macOS:
+```bash
 PYTHONPATH=src uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
 ```
 
