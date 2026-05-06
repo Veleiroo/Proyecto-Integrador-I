@@ -33,7 +33,32 @@ npm run dev
 
 La web usa `VITE_API_BASE_URL` para decidir a que backend local conectarse. Si no existe, usa `http://localhost:8000`.
 
-El acceso a camara funciona en `localhost` durante desarrollo. Si se accede desde otro dispositivo de la red, el navegador normalmente exigira HTTPS.
+## Pruebas LAN con camara por HTTPS
+
+Para que `navigator.mediaDevices.getUserMedia` funcione desde otro ordenador de la misma red, usa el modo HTTPS de desarrollo de Vite. Este modo activa un certificado auto-firmado y un proxy local para `/api`, de forma que el navegador no vea llamadas HTTP directas.
+
+1. Arranca el backend en el ordenador anfitrion:
+
+```bash
+PYTHONPATH=src uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
+```
+
+2. Arranca el frontend en modo HTTPS:
+
+```bash
+cd apps/web
+npm run dev:https
+```
+
+3. Abre la app desde otro ordenador en:
+
+```text
+https://IP_DEL_HOST:5173
+```
+
+4. Acepta o confia el certificado de desarrollo si el navegador lo pide.
+
+En este modo, deja vacio el campo de API local para usar el proxy de Vite. Si prefieres apuntar manualmente al backend, vuelve al modo HTTP normal y usa `http://IP_DEL_HOST:8000` en el campo de conexion.
 
 ## Instalacion local
 
