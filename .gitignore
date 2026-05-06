@@ -10,6 +10,7 @@ __pycache__/
 # Local datasets and generated subsets
 data/raw/
 data/pose_subset/
+data/app/
 
 # Downloaded models and assets
 models/mediapipe/
@@ -18,3 +19,7 @@ models/mediapipe/
 # Notebook outputs
 notebooks/pose_benchmark/results/
 notebooks/ergonomics/results/
+
+# Web app local artifacts
+apps/web/node_modules/
+apps/web/dist/

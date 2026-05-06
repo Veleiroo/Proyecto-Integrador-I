@@ -178,6 +178,51 @@ Dependencias principales:
 - `tensorflow-hub`
 - `ultralytics`
 - `pandas`
+
+## Aplicacion web
+
+La primera version de aplicacion esta separada en dos piezas:
+
+- Backend FastAPI en `src/ergonomics/api.py`
+- Frontend React/Vite en `apps/web/`
+
+La separacion de codigo queda asi:
+
+- `src/ergonomics/pose_inference.py`, `posture_rules.py`, `yolo_pose_inference.py`, `lateral_rules.py` y modulos cercanos: nucleo cientifico usado por notebooks y app.
+- `src/ergonomics/app_service.py`: adaptador de inferencia y reglas para producto.
+- `src/ergonomics/api.py`, `app_config.py`, `app_security.py`, `app_storage.py`: capa de aplicacion, API, autenticacion y persistencia.
+- `notebooks/`: justificacion experimental y trazabilidad de decisiones.
+
+La web ya incluye una pantalla principal de camara para comprobar encuadre e iniciar una sesion de seguimiento, mas una pantalla de revision por imagen como respaldo si la camara no esta disponible. Tambien incorpora modo claro/oscuro persistente para presentacion y uso real.
+
+La aplicacion queda planteada como local-first: el backend corre en el ordenador del usuario, usa SQLite local, separa usuarios con login, guarda contrasenas hasheadas y cifra resultados. Las imagenes no se guardan por defecto: el API las procesa como temporales y las borra al terminar.
+
+Para levantar el backend:
+
+```bash
+python -m pip install -r requirements-api.txt
+PYTHONPATH=src uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
+```
+
+Variables recomendadas en despliegue:
+
+```bash
+ERGONOMICS_DB_PATH=/ruta/local/postureos.sqlite3
+ERGONOMICS_REQUIRE_AUTH=true
+ERGONOMICS_SEED_DEFAULT_USERS=true
+```
+
+Si no se define `ERGONOMICS_SECRET_KEY`, el backend genera una clave local en un archivo `.key` junto a la base de datos. En modo local se crean usuarios iniciales `admin`/`admin` y `Pablo`/`1234`, salvo que se desactive con `ERGONOMICS_SEED_DEFAULT_USERS=false`.
+
+Para levantar la web:
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+En el modo objetivo, backend y web se ejecutan localmente. El modo centralizado queda como extension opcional para empresas que ya dispongan de infraestructura propia.
 - `matplotlib`
 - `tqdm`
 - `jupytext`
