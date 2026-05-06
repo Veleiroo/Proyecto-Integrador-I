@@ -81,6 +81,7 @@ type AuthSession = {
   expires_at: string;
 };
 
+const USE_LOCAL_PROXY = import.meta.env.VITE_DEV_HTTPS === "1";
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 const sectionCopy: Record<Section, { eyebrow: string; title: string }> = {
@@ -160,7 +161,10 @@ function App() {
   });
   const [activeSection, setActiveSection] = useState<Section>("camera");
   const [theme, setTheme] = useState<Theme>((localStorage.getItem("theme") as Theme | null) ?? "light");
-  const [apiBase, setApiBase] = useState(normalizeApiBase(localStorage.getItem("apiBase") ?? DEFAULT_API_BASE));
+  const [apiBase, setApiBase] = useState(() => {
+    if (USE_LOCAL_PROXY) return "";
+    return normalizeApiBase(localStorage.getItem("apiBase") ?? DEFAULT_API_BASE);
+  });
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [view, setView] = useState<ViewMode>("front");
   const [file, setFile] = useState<File | null>(null);
@@ -1177,7 +1181,9 @@ function PrivacyPanel({ apiBase, setApiBase }: { apiBase: string; setApiBase: (v
         </label>
         <div className="deployment-note">
           <FileImage size={20} />
-          <p>Para uso normal deja <code>http://localhost:8000</code>. Si se accede desde otro equipo de la red, usa la IP local del ordenador que ejecuta el backend.</p>
+          <p>
+            En modo HTTP puedes usar <code>http://localhost:8000</code> o <code>http://IP_DEL_HOST:8000</code>. En modo HTTPS de desarrollo deja este campo vacío para usar el proxy local de Vite y evitar bloqueos de contenido mixto.
+          </p>
         </div>
       </div>
     </section>
