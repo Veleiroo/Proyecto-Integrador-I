@@ -628,7 +628,7 @@ function CameraPanel({
   const [permissionState, setPermissionState] = useState<PermissionState | "unsupported">("unsupported");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [cadence, setCadence] = useState("Cada 10 min");
+  const [cadence, setCadence] = useState("Cada 1 min");
   const [lastCapture, setLastCapture] = useState<ApiResult | null>(null);
   const [captureStatus, setCaptureStatus] = useState<string>("Sin capturas en esta sesión");
 
@@ -727,9 +727,10 @@ function CameraPanel({
   }
 
   function cadenceMs() {
+    if (cadence.includes("1")) return 1 * 60 * 1000;
     if (cadence.includes("5")) return 5 * 60 * 1000;
     if (cadence.includes("20")) return 20 * 60 * 1000;
-    return 10 * 60 * 1000;
+    return 1 * 60 * 1000;
   }
 
   async function toggleNotifications() {
@@ -873,7 +874,7 @@ function CameraPanel({
           </div>
           <p className="panel-note">{captureStatus}</p>
           <div className="cadence-options">
-            {["Cada 5 min", "Cada 10 min", "Cada 20 min"].map((item) => (
+            {["Cada 1 min", "Cada 5 min", "Cada 20 min"].map((item) => (
               <button key={item} className={cadence === item ? "active" : ""} type="button" onClick={() => setCadence(item)}>
                 {item}
               </button>
