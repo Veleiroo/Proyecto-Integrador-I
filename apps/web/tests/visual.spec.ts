@@ -270,6 +270,7 @@ test.describe('PostureOS Visual Validation', () => {
     await expect(page.getByLabel('Cámara frontal')).toBeVisible();
     await expect(page.getByLabel('Cámara lateral')).toBeVisible();
     await expect(page.getByRole('button', { name: /Capturar doble vista/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Seguimiento doble/ })).toBeVisible();
   });
 
   test('backend metric keys are presented with Spanish labels', async ({ page }) => {

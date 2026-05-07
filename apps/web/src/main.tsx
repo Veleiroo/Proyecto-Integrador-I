@@ -615,6 +615,7 @@ function CameraPanel({
   const lateralStreamRef = useRef<MediaStream | null>(null);
   const runTimerRef = useRef<number | null>(null);
   const isRunningRef = useRef(false);
+  const trackingViewRef = useRef<Extract<ViewMode, "front" | "lateral">>("front");
   const [cameraStates, setCameraStates] = useState<Record<Extract<ViewMode, "front" | "lateral">, "idle" | "loading" | "ready" | "error">>({
     front: "idle",
     lateral: "idle",
@@ -852,16 +853,16 @@ function CameraPanel({
     setNotificationsEnabled(true);
   }
 
-  function scheduleNextCapture() {
+  function scheduleNextCapture(view: Extract<ViewMode, "front" | "lateral">) {
     if (runTimerRef.current) window.clearTimeout(runTimerRef.current);
     runTimerRef.current = window.setTimeout(async () => {
       if (!isRunningRef.current) return;  // Usar el ref en lugar del state
       try {
-        await captureAndAnalyze("front");
+        await captureAndAnalyze(view);
       } catch (error) {
         setCaptureStatus(error instanceof Error ? error.message : "No se pudo analizar la captura.");
       }
-      scheduleNextCapture();
+      scheduleNextCapture(view);
     }, cadenceMs());
   }
 
@@ -873,11 +874,13 @@ function CameraPanel({
       runTimerRef.current = null;
       return;
     }
+    const nextTrackingView = activeView;
+    trackingViewRef.current = nextTrackingView;
     isRunningRef.current = true;
     setIsRunning(true);
     try {
-      await captureAndAnalyze("front");
-      scheduleNextCapture();
+      await captureAndAnalyze(nextTrackingView);
+      scheduleNextCapture(nextTrackingView);
     } catch (error) {
       setCaptureStatus(error instanceof Error ? error.message : "No se pudo analizar la captura.");
       isRunningRef.current = false;
@@ -887,6 +890,8 @@ function CameraPanel({
 
   const frontReady = cameraStates.front === "ready";
   const lateralReady = cameraStates.lateral === "ready";
+  const trackingLabel = activeView === "front" ? "Seguimiento frontal" : "Seguimiento doble";
+  const runningLabel = trackingViewRef.current === "front" ? "Seguimiento frontal activo" : "Seguimiento doble activo";
   const cameraReady = activeView === "front" ? frontReady : frontReady && lateralReady;
   const permissionGranted = permissionState === "granted" || frontReady || lateralReady;
   const permissionLabel =
@@ -971,7 +976,7 @@ function CameraPanel({
             </button>
           </div>
           <div className="camera-actions">
-            <button className="ghost-button" type="button" onClick={cameraReady ? stopAllCameras : () => startCamera(activeView)}>
+            <button className="ghost-button" type="button" onClick={cameraReady ? stopAllCameras : () => activeView === "lateral" ? Promise.all([startCamera("front"), startCamera("lateral")]) : startCamera("front")}>
               {cameraReady ? <VideoOff size={17} /> : <Video size={17} />}
               {cameraReady ? "Apagar cámaras" : "Solicitar permiso"}
             </button>
@@ -981,7 +986,7 @@ function CameraPanel({
             </button>
             <button className="primary-button" type="button" onClick={toggleRun}>
               {isRunning ? <Pause size={18} /> : <Play size={18} />}
-              {isRunning ? "Pausar sesión" : "Seguimiento frontal"}
+              {isRunning ? "Pausar sesión" : trackingLabel}
             </button>
           </div>
         </div>
@@ -992,7 +997,7 @@ function CameraPanel({
           <div className="status-icon">{isRunning ? <Activity /> : <MonitorCheck />}</div>
           <div>
             <span>Estado de sesión</span>
-            <strong>{isRunning ? "Seguimiento activo" : "Preparado"}</strong>
+            <strong>{isRunning ? runningLabel : "Preparado"}</strong>
           </div>
         </div>
 
