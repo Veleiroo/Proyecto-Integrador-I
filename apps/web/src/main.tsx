@@ -261,6 +261,7 @@ function App() {
   const [history, setHistory] = useState<ReviewRecord[]>([]);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem("notificationsEnabled") !== "false");
+  const refreshRequestRef = useRef(0);
 
   useEffect(() => {
     localStorage.setItem("theme", theme);
@@ -324,11 +325,13 @@ function App() {
 
   async function refreshUserData() {
     if (!session) return;
+    const requestId = ++refreshRequestRef.current;
     try {
       const [historyResponse, statsResponse] = await Promise.all([
         fetch(`${apiBase}/api/analyses?limit=30`, { headers: authHeaders }),
         fetch(`${apiBase}/api/summary`, { headers: authHeaders }),
       ]);
+      if (requestId !== refreshRequestRef.current) return;
       if (historyResponse.ok) {
         const body = await historyResponse.json();
         setHistory(
@@ -360,7 +363,7 @@ function App() {
       nextRecord,
       ...items.slice(0, 29),
     ]);
-    refreshUserData();
+    void refreshUserData();
   }
 
   function notifyAnalysis(nextResult: ApiResult) {

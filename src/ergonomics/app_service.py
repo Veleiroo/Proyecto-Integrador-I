@@ -200,16 +200,23 @@ class PostureAnalyzer:
         )
 
     def analyze_lateral_image(self, image_path: str | Path) -> dict:
-        estimator = self._get_lateral_estimator()
-        pose_row = estimator.infer_image(image_path)
+        model = "YOLO Pose"
+        backend = None
+        try:
+            pose_row = self._get_lateral_estimator().infer_image(image_path)
+            backend = pose_row.get("pose_backend")
+        except ImportError:
+            pose_row = self._get_front_estimator().infer_image(image_path)
+            model = "MediaPipe Pose (fallback lateral)"
+            backend = "mediapipe_tasks_lateral_fallback"
         analysis = analyze_lateral_pose_row(
             pose_row,
             visibility_threshold=self.lateral_visibility_threshold,
         )
         return _review_payload(
             view="lateral",
-            model="YOLO Pose",
-            backend=pose_row.get("pose_backend"),
+            model=model,
+            backend=backend,
             analysis=analysis,
             metrics=_pick_metrics(analysis, LATERAL_METRICS),
             visible_landmarks_count=pose_row.get("visible_landmarks_count"),
