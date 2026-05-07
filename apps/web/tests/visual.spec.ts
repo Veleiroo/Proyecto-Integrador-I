@@ -232,6 +232,46 @@ test.describe('PostureOS Visual Validation', () => {
     await expect(page.getByText('API local')).toHaveCount(0);
   });
 
+  test('camera panel: lateral mode enables dual-view capture', async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.endsWith('/api/auth/me')) {
+        await route.fulfill({ json: { id: 1, username: 'Pablo', display_name: 'Pablo', role: 'user', created_at: new Date().toISOString() } });
+        return;
+      }
+      if (url.endsWith('/api/health')) {
+        await route.fulfill({ json: { ok: true } });
+        return;
+      }
+      if (url.includes('/api/analyses')) {
+        await route.fulfill({ json: { items: [] } });
+        return;
+      }
+      if (url.includes('/api/summary')) {
+        await route.fulfill({ json: { total: 0, by_status: {}, latest_at: null, periods: { last_7_days: { total: 0, adequate_ratio: 0, risk_count: 0, improvable_count: 0 } }, timeline: [], recommendations: [] } });
+        return;
+      }
+      await route.fulfill({ status: 404, json: {} });
+    });
+    await page.addInitScript(() => {
+      localStorage.setItem('authSession', JSON.stringify({
+        user: { id: 1, username: 'Pablo', display_name: 'Pablo', role: 'user', created_at: new Date().toISOString() },
+        access_token: 'test-token',
+        token_type: 'bearer',
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      }));
+    });
+
+    await page.goto(BASE_URL);
+    const lateralButton = page.getByRole('button', { name: /Lateral Opcional/ });
+    await expect(lateralButton).toBeEnabled();
+    await lateralButton.click();
+    await expect(page.getByText('Frontal + lateral')).toBeVisible();
+    await expect(page.getByLabel('Cámara frontal')).toBeVisible();
+    await expect(page.getByLabel('Cámara lateral')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Capturar doble vista/ })).toBeVisible();
+  });
+
   test('backend metric keys are presented with Spanish labels', async ({ page }) => {
     const createdAt = new Date().toISOString();
     const record = {
@@ -323,7 +363,7 @@ test.describe('PostureOS Visual Validation', () => {
     });
     
     // Esperar a que todo se cargue
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(500);
     
     // No debería haber errores de CSS

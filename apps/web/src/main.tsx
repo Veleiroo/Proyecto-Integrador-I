@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-type ViewMode = "front" | "lateral";
+type ViewMode = "front" | "lateral" | "combined";
 type Status = "adequate" | "improvable" | "risk" | "insufficient_data";
 type Section = "camera" | "stats" | "history" | "privacy";
 type Theme = "light" | "dark";
@@ -114,6 +114,12 @@ const viewCopy: Record<ViewMode, { label: string; short: string; endpoint: strin
     endpoint: "/api/analyze/lateral",
     model: "YOLO Pose",
   },
+  combined: {
+    label: "Evaluación combinada",
+    short: "Frontal base con lateral opcional",
+    endpoint: "/api/analyze/combined",
+    model: "MediaPipe Pose + YOLO Pose",
+  },
 };
 
 const metricLabels: Record<string, string> = {
@@ -147,6 +153,23 @@ const componentLabels: Record<string, string> = {
   right_elbow_status: "Codo derecho",
   shoulder_hip_status: "Alineación hombro-cadera",
   lateral_elbow_status: "Codo lateral",
+  front_shoulder_tilt_status: "Frontal: inclinación de hombros",
+  front_shoulder_height_status: "Frontal: desnivel de hombros",
+  front_neck_status: "Frontal: cuello",
+  front_neck_tilt_status: "Frontal: inclinación cervical",
+  front_shoulder_status: "Frontal: hombros",
+  front_trunk_status: "Frontal: tronco",
+  front_head_status: "Frontal: cabeza y cuello",
+  front_head_offset_status: "Frontal: desplazamiento de cabeza",
+  front_left_elbow_status: "Frontal: codo izquierdo",
+  front_right_elbow_status: "Frontal: codo derecho",
+  lateral_neck_status: "Lateral: cuello",
+  lateral_head_neck_status: "Lateral: cabeza y cuello",
+  lateral_head_offset_status: "Lateral: cabeza adelantada",
+  lateral_trunk_tilt_status: "Lateral: inclinación del tronco",
+  lateral_shoulder_hip_status: "Lateral: alineación hombro-cadera",
+  lateral_trunk_status: "Lateral: tronco",
+  lateral_lateral_elbow_status: "Lateral: codo",
 };
 
 const statusLabels: Record<string, string> = {
@@ -586,12 +609,21 @@ function CameraPanel({
   setNotificationsEnabled: (value: boolean) => void;
   onAnalysis: (analysis: ApiResult & { id?: number; created_at?: string }) => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const frontVideoRef = useRef<HTMLVideoElement | null>(null);
+  const lateralVideoRef = useRef<HTMLVideoElement | null>(null);
+  const frontStreamRef = useRef<MediaStream | null>(null);
+  const lateralStreamRef = useRef<MediaStream | null>(null);
   const runTimerRef = useRef<number | null>(null);
   const isRunningRef = useRef(false);
-  const [cameraState, setCameraState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [cameraStates, setCameraStates] = useState<Record<Extract<ViewMode, "front" | "lateral">, "idle" | "loading" | "ready" | "error">>({
+    front: "idle",
+    lateral: "idle",
+  });
   const [permissionState, setPermissionState] = useState<PermissionState | "unsupported">("unsupported");
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [frontDeviceId, setFrontDeviceId] = useState("");
+  const [lateralDeviceId, setLateralDeviceId] = useState("");
+  const [activeView, setActiveView] = useState<Extract<ViewMode, "front" | "lateral">>("front");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [cadence, setCadence] = useState("Cada 1 min");
@@ -618,36 +650,81 @@ function CameraPanel({
     return () => {
       permissionStatus?.removeEventListener("change", updatePermission);
       if (runTimerRef.current) window.clearTimeout(runTimerRef.current);
-      stopCamera();
+      stopAllCameras();
     };
   }, []);
 
-  async function startCamera() {
-    if (streamRef.current && videoRef.current?.srcObject) {
-      setCameraState("ready");
+  useEffect(() => {
+    refreshDevices();
+    navigator.mediaDevices?.addEventListener?.("devicechange", refreshDevices);
+    return () => navigator.mediaDevices?.removeEventListener?.("devicechange", refreshDevices);
+  }, []);
+
+  useEffect(() => {
+    if (frontStreamRef.current) stopCamera("front");
+  }, [frontDeviceId]);
+
+  useEffect(() => {
+    if (lateralStreamRef.current) stopCamera("lateral");
+  }, [lateralDeviceId]);
+
+  async function refreshDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const nextDevices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput");
+    setDevices(nextDevices);
+    if (!frontDeviceId && nextDevices[0]?.deviceId) {
+      setFrontDeviceId(nextDevices[0].deviceId);
+    }
+    if (!lateralDeviceId && nextDevices[1]?.deviceId) {
+      setLateralDeviceId(nextDevices[1].deviceId);
+    }
+  }
+
+  function videoFor(view: Extract<ViewMode, "front" | "lateral">) {
+    return view === "front" ? frontVideoRef.current : lateralVideoRef.current;
+  }
+
+  function streamFor(view: Extract<ViewMode, "front" | "lateral">) {
+    return view === "front" ? frontStreamRef.current : lateralStreamRef.current;
+  }
+
+  function setStreamFor(view: Extract<ViewMode, "front" | "lateral">, stream: MediaStream | null) {
+    if (view === "front") {
+      frontStreamRef.current = stream;
+    } else {
+      lateralStreamRef.current = stream;
+    }
+  }
+
+  async function startCamera(view: Extract<ViewMode, "front" | "lateral"> = activeView) {
+    const video = videoFor(view);
+    if (streamFor(view) && video?.srcObject) {
+      setCameraStates((current) => ({ ...current, [view]: "ready" }));
       return true;
     }
-    setCameraState("loading");
+    const deviceId = view === "front" ? frontDeviceId : lateralDeviceId;
+    setCameraStates((current) => ({ ...current, [view]: "loading" }));
     setCameraError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
           height: { ideal: 720 },
-          facingMode: "user",
+          ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" }),
         },
         audio: false,
       });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+      setStreamFor(view, stream);
+      if (video) {
+        video.srcObject = stream;
+        await video.play();
       }
-      setCameraState("ready");
+      setCameraStates((current) => ({ ...current, [view]: "ready" }));
       setPermissionState("granted");
+      await refreshDevices();
       return true;
     } catch (error) {
-      setCameraState("error");
+      setCameraStates((current) => ({ ...current, [view]: "error" }));
       if (error instanceof DOMException && error.name === "NotAllowedError") {
         setPermissionState("denied");
       }
@@ -656,32 +733,43 @@ function CameraPanel({
     }
   }
 
-  function stopCamera() {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    if (videoRef.current) videoRef.current.srcObject = null;
-    setCameraState("idle");
+  function stopCamera(view: Extract<ViewMode, "front" | "lateral"> = activeView) {
+    streamFor(view)?.getTracks().forEach((track) => track.stop());
+    setStreamFor(view, null);
+    const video = videoFor(view);
+    if (video) video.srcObject = null;
+    setCameraStates((current) => ({ ...current, [view]: "idle" }));
   }
 
-  async function captureAndAnalyze() {
-    setCaptureStatus("Capturando imagen frontal...");
-    const started = await startCamera();
-    if (!started || !videoRef.current) return;
-    await new Promise((resolve) => window.setTimeout(resolve, 900));
-    const video = videoRef.current;
+  function stopAllCameras() {
+    stopCamera("front");
+    stopCamera("lateral");
+  }
+
+  function snapshotVideo(video: HTMLVideoElement | null) {
+    if (!video) return null;
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth || 1280;
     canvas.height = video.videoHeight || 720;
     const context = canvas.getContext("2d");
-    if (!context) return;
+    if (!context) return null;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    stopCamera();
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
-    if (!blob) return;
+    return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+  }
+
+  async function captureFrameBlob(view: Extract<ViewMode, "front" | "lateral">, stopAfter = true) {
+    const started = await startCamera(view);
+    if (!started) return null;
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
+    const blob = await snapshotVideo(videoFor(view));
+    if (stopAfter) stopCamera(view);
+    return blob;
+  }
+
+  async function postAnalysis(view: Extract<ViewMode, "front" | "lateral">, blob: Blob) {
     const payload = new FormData();
-    payload.append("file", blob, `capture-${Date.now()}.jpg`);
-    setCaptureStatus("Analizando postura...");
-    const response = await fetch(`${apiBase}/api/analyze/front`, {
+    payload.append("file", blob, `${view}-capture-${Date.now()}.jpg`);
+    const response = await fetch(`${apiBase}${viewCopy[view].endpoint}`, {
       method: "POST",
       headers: authHeaders,
       body: payload,
@@ -691,10 +779,59 @@ function CameraPanel({
       setCaptureStatus(body?.detail ?? `Error ${response.status}`);
       throw new Error(body?.detail ?? `Error ${response.status}`);
     }
-    const analysis = (await response.json()) as ApiResult & { id?: number; created_at?: string };
+    return (await response.json()) as ApiResult & { id?: number; created_at?: string };
+  }
+
+  async function postCombinedAnalysis(frontBlob: Blob, lateralBlob: Blob) {
+    const payload = new FormData();
+    payload.append("front_file", frontBlob, `front-combined-${Date.now()}.jpg`);
+    payload.append("lateral_file", lateralBlob, `lateral-combined-${Date.now()}.jpg`);
+    const response = await fetch(`${apiBase}/api/analyze/combined`, {
+      method: "POST",
+      headers: authHeaders,
+      body: payload,
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      setCaptureStatus(body?.detail ?? `Error ${response.status}`);
+      throw new Error(body?.detail ?? `Error ${response.status}`);
+    }
+    return (await response.json()) as ApiResult & { id?: number; created_at?: string };
+  }
+
+  async function captureAndAnalyze(view: Extract<ViewMode, "front" | "lateral"> = "front") {
+    if (view === "lateral") {
+      await captureDualAndAnalyze();
+      return;
+    }
+    setCaptureStatus(`Capturando ${viewCopy[view].label.toLowerCase()}...`);
+    const blob = await captureFrameBlob(view);
+    if (!blob) return;
+    setCaptureStatus(`Analizando ${viewCopy[view].label.toLowerCase()}...`);
+    const analysis = await postAnalysis(view, blob);
     setLastCapture(analysis);
     setCaptureStatus(`Última captura: ${analysis.status_label}`);
     onAnalysis(analysis);
+  }
+
+  async function captureDualAndAnalyze() {
+    setCaptureStatus("Capturando frontal y lateral...");
+    const [frontStarted, lateralStarted] = await Promise.all([startCamera("front"), startCamera("lateral")]);
+    if (!frontStarted || !lateralStarted) return;
+    await new Promise((resolve) => window.setTimeout(resolve, 900));
+    const [frontBlob, lateralBlob] = await Promise.all([snapshotVideo(frontVideoRef.current), snapshotVideo(lateralVideoRef.current)]);
+    stopAllCameras();
+    if (!frontBlob || !lateralBlob) return;
+
+    setCaptureStatus("Analizando vista lateral...");
+    const lateral = await postAnalysis("lateral", lateralBlob);
+    onAnalysis(lateral);
+
+    setCaptureStatus("Generando evaluación combinada frontal + lateral...");
+    const combined = await postCombinedAnalysis(frontBlob, lateralBlob);
+    setLastCapture(combined);
+    setCaptureStatus(`Combinada actualizada: ${combined.status_label}`);
+    onAnalysis(combined);
   }
 
   function cadenceMs() {
@@ -720,7 +857,7 @@ function CameraPanel({
     runTimerRef.current = window.setTimeout(async () => {
       if (!isRunningRef.current) return;  // Usar el ref en lugar del state
       try {
-        await captureAndAnalyze();
+        await captureAndAnalyze("front");
       } catch (error) {
         setCaptureStatus(error instanceof Error ? error.message : "No se pudo analizar la captura.");
       }
@@ -739,7 +876,7 @@ function CameraPanel({
     isRunningRef.current = true;
     setIsRunning(true);
     try {
-      await captureAndAnalyze();
+      await captureAndAnalyze("front");
       scheduleNextCapture();
     } catch (error) {
       setCaptureStatus(error instanceof Error ? error.message : "No se pudo analizar la captura.");
@@ -748,8 +885,10 @@ function CameraPanel({
     }
   }
 
-  const cameraReady = cameraState === "ready";
-  const permissionGranted = permissionState === "granted" || cameraReady;
+  const frontReady = cameraStates.front === "ready";
+  const lateralReady = cameraStates.lateral === "ready";
+  const cameraReady = activeView === "front" ? frontReady : frontReady && lateralReady;
+  const permissionGranted = permissionState === "granted" || frontReady || lateralReady;
   const permissionLabel =
     permissionState === "granted"
       ? "Concedido"
@@ -762,56 +901,87 @@ function CameraPanel({
     { label: "Permiso", value: permissionGranted && !cameraReady ? "Autorizado" : permissionLabel, status: permissionGranted ? "ok" : permissionState === "denied" ? "risk" : "warn" },
     { label: "Cámara", value: cameraReady ? "Lista" : "Pendiente", status: cameraReady ? "ok" : "muted" },
     { label: "Backend", value: apiOnline ? "Conectado" : "No conectado", status: apiOnline ? "ok" : "warn" },
-    { label: "Encuadre", value: cameraReady ? "Centrado" : "Sin vista previa", status: cameraReady ? "ok" : "muted" },
-    { label: "Modo", value: "Vista frontal", status: "muted" },
+    { label: "Encuadre", value: cameraReady ? (activeView === "front" ? "Frontal" : "Doble vista") : "Sin vista previa", status: cameraReady ? "ok" : "muted" },
+    { label: "Modo", value: activeView === "front" ? "Frontal base" : "Frontal + lateral", status: "muted" },
   ];
 
   return (
     <section className="camera-layout">
       <div className="camera-card">
-        <div className={`camera-preview ${cameraReady ? "is-live" : ""}`}>
-          <video ref={videoRef} muted playsInline />
-          {!cameraReady && (
-            <div className="camera-placeholder">
-              {cameraState === "loading" ? <Loader2 className="spin" size={42} /> : <Video size={48} />}
-              <strong>{cameraState === "error" ? "Cámara no disponible" : "Permitir acceso a cámara"}</strong>
-              <span>{cameraError ?? "El navegador mostrará una solicitud de permiso. Acepta para comprobar el encuadre antes de iniciar la sesión."}</span>
-              <button className="permission-button" type="button" onClick={startCamera} disabled={cameraState === "loading"}>
-                {cameraState === "loading" ? <Loader2 className="spin" size={17} /> : <Video size={17} />}
-                Permitir cámara
-              </button>
-              {permissionState === "denied" && (
-                <small>El permiso está bloqueado. Actívalo desde el icono de candado de la barra del navegador y recarga la página.</small>
+        <div className={activeView === "lateral" ? "dual-camera-grid" : ""}>
+          <div className={`camera-preview ${frontReady ? "is-live" : ""} ${activeView === "lateral" ? "compact" : ""}`}>
+            {activeView === "lateral" && <div className="camera-slot-label">Frontal</div>}
+            <video ref={frontVideoRef} muted playsInline />
+            {!frontReady && (
+              <div className="camera-placeholder">
+                {cameraStates.front === "loading" ? <Loader2 className="spin" size={42} /> : <Video size={48} />}
+                <strong>{cameraStates.front === "error" ? "Cámara frontal no disponible" : "Permitir cámara frontal"}</strong>
+                <span>{cameraError ?? "La vista frontal sigue siendo la referencia base para el seguimiento."}</span>
+                <button className="permission-button" type="button" onClick={() => startCamera("front")} disabled={cameraStates.front === "loading"}>
+                  {cameraStates.front === "loading" ? <Loader2 className="spin" size={17} /> : <Video size={17} />}
+                  Permitir frontal
+                </button>
+                {permissionState === "denied" && (
+                  <small>El permiso está bloqueado. Actívalo desde el icono de candado de la barra del navegador y recarga la página.</small>
+                )}
+              </div>
+            )}
+            {frontReady && (
+              <div className="frame-guide">
+                <span />
+                <em>Encaja cabeza y hombros dentro del marco</em>
+              </div>
+            )}
+          </div>
+
+          {activeView === "lateral" && (
+            <div className={`camera-preview compact ${lateralReady ? "is-live" : ""}`}>
+              <div className="camera-slot-label">Lateral</div>
+              <video ref={lateralVideoRef} muted playsInline />
+              {!lateralReady && (
+                <div className="camera-placeholder">
+                  {cameraStates.lateral === "loading" ? <Loader2 className="spin" size={42} /> : <Video size={48} />}
+                  <strong>{cameraStates.lateral === "error" ? "Cámara lateral no disponible" : "Permitir cámara lateral"}</strong>
+                  <span>{cameraError ?? "Coloca el móvil o segunda cámara de perfil para medir tronco, cabeza adelantada y codo."}</span>
+                  <button className="permission-button" type="button" onClick={() => startCamera("lateral")} disabled={cameraStates.lateral === "loading"}>
+                    {cameraStates.lateral === "loading" ? <Loader2 className="spin" size={17} /> : <Video size={17} />}
+                    Permitir lateral
+                  </button>
+                </div>
               )}
-            </div>
-          )}
-          {cameraReady && (
-            <div className="frame-guide">
-              <span />
-              <em>Encaja cabeza y hombros dentro del marco</em>
+              {lateralReady && (
+                <div className="frame-guide">
+                  <span />
+                  <em>Coloca el cuerpo de perfil dentro del marco</em>
+                </div>
+              )}
             </div>
           )}
         </div>
 
         <div className="camera-toolbar">
           <div className="view-switch compact">
-            <button className="active" type="button">
+            <button className={activeView === "front" ? "active" : ""} type="button" onClick={() => setActiveView("front")}>
               <strong>Frontal</strong>
-              <span>MediaPipe Pose</span>
+              <span>Base de seguimiento</span>
             </button>
-            <button type="button" disabled>
+            <button className={activeView === "lateral" ? "active" : ""} type="button" onClick={() => setActiveView("lateral")}>
               <strong>Lateral</strong>
-              <span>Próxima fase</span>
+              <span>Opcional + combinado</span>
             </button>
           </div>
           <div className="camera-actions">
-            <button className="ghost-button" type="button" onClick={cameraReady ? stopCamera : startCamera}>
+            <button className="ghost-button" type="button" onClick={cameraReady ? stopAllCameras : () => startCamera(activeView)}>
               {cameraReady ? <VideoOff size={17} /> : <Video size={17} />}
-              {cameraReady ? "Apagar cámara" : "Solicitar permiso"}
+              {cameraReady ? "Apagar cámaras" : "Solicitar permiso"}
+            </button>
+            <button className="ghost-button" type="button" onClick={() => captureAndAnalyze(activeView)} disabled={cameraStates.front === "loading" || cameraStates.lateral === "loading"}>
+              <Activity size={17} />
+              {activeView === "front" ? "Capturar frontal" : "Capturar doble vista"}
             </button>
             <button className="primary-button" type="button" onClick={toggleRun}>
               {isRunning ? <Pause size={18} /> : <Play size={18} />}
-              {isRunning ? "Pausar sesión" : "Iniciar seguimiento"}
+              {isRunning ? "Pausar sesión" : "Seguimiento frontal"}
             </button>
           </div>
         </div>
@@ -837,6 +1007,41 @@ function CameraPanel({
               <strong className={item.status}>{item.value}</strong>
             </div>
           ))}
+        </section>
+
+        <section className="data-card">
+          <div className="section-title">
+            <h2>Cámara</h2>
+            <Video size={18} />
+          </div>
+          <label className="settings-label compact">
+            Cámara frontal
+            <select value={frontDeviceId} onChange={(event) => setFrontDeviceId(event.target.value)}>
+              {devices.length === 0 ? (
+                <option value="">Cámara predeterminada</option>
+              ) : (
+                devices.map((device, index) => (
+                  <option key={device.deviceId || index} value={device.deviceId}>
+                    {device.label || `Cámara ${index + 1}`}
+                  </option>
+                ))
+              )}
+            </select>
+          </label>
+          {activeView === "lateral" && (
+            <label className="settings-label compact">
+              Cámara lateral
+              <select value={lateralDeviceId} onChange={(event) => setLateralDeviceId(event.target.value)}>
+                <option value="">Cámara predeterminada</option>
+                {devices.map((device, index) => (
+                  <option key={device.deviceId || index} value={device.deviceId}>
+                    {device.label || `Cámara ${index + 1}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <p className="panel-note">En modo lateral conviven dos fuentes: webcam para frontal y móvil o segunda cámara para perfil.</p>
         </section>
 
         <section className="data-card">

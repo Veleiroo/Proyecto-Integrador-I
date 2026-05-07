@@ -175,6 +175,34 @@ async def _analyze_upload(file: UploadFile, view: str, user: dict | None = None)
             pass
 
 
+async def _analyze_combined_uploads(
+    front_file: UploadFile,
+    lateral_file: UploadFile | None,
+    user: dict | None = None,
+) -> dict:
+    front_path = await _save_upload(front_file)
+    lateral_path = await _save_upload(lateral_file) if lateral_file is not None else None
+    try:
+        analyzer: PostureAnalyzer = app.state.analyzer
+        result = analyzer.analyze_combined_images(front_path, lateral_path)
+        if user is not None:
+            saved = _storage().save_analysis(user_id=user["id"], result=result)
+            result = {**result, "id": saved["id"], "created_at": saved["created_at"]}
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        for image_path in (front_path, lateral_path):
+            if image_path is None:
+                continue
+            try:
+                image_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
 @app.get("/api/health")
 def health() -> dict:
     config: AppConfig = app.state.config
@@ -213,6 +241,17 @@ async def analyze_lateral(
     if app.state.config.require_auth and user is None:
         raise HTTPException(status_code=401, detail="Autenticación requerida.")
     return await _analyze_upload(file, "lateral", user)
+
+
+@app.post("/api/analyze/combined")
+async def analyze_combined(
+    user: Annotated[dict | None, Depends(optional_user)],
+    front_file: UploadFile = File(...),
+    lateral_file: UploadFile | None = File(None),
+) -> dict:
+    if app.state.config.require_auth and user is None:
+        raise HTTPException(status_code=401, detail="Autenticación requerida.")
+    return await _analyze_combined_uploads(front_file, lateral_file, user)
 
 
 @app.post("/api/auth/register")

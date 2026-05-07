@@ -19,6 +19,13 @@ STATUS_LABELS = {
     "insufficient_data": "Datos insuficientes",
 }
 
+SEVERITY_ORDER = {
+    "insufficient_data": 0,
+    "adequate": 1,
+    "improvable": 2,
+    "risk": 3,
+}
+
 
 FRONT_METRICS = [
     "shoulder_tilt_deg",
@@ -84,6 +91,54 @@ def _review_payload(
         "feedback": analysis.get("feedback"),
         "metrics": metrics,
         "components": _pick_statuses(analysis),
+    }
+
+
+def _worst_status(statuses: list[str]) -> str:
+    available = [status for status in statuses if status != "insufficient_data"]
+    if not available:
+        return "insufficient_data"
+    return max(available, key=lambda item: SEVERITY_ORDER.get(item, 0))
+
+
+def _prefix_components(prefix: str, components: dict[str, str]) -> dict[str, str]:
+    return {f"{prefix}_{key}": value for key, value in components.items()}
+
+
+def combine_review_payloads(front: dict, lateral: dict | None = None) -> dict:
+    if lateral is None:
+        return {
+            **front,
+            "view": "combined",
+            "model": front.get("model", "MediaPipe Pose"),
+            "backend": front.get("backend"),
+            "feedback": f"Evaluación frontal: {front.get('feedback')}",
+        }
+
+    status = _worst_status([str(front.get("status")), str(lateral.get("status"))])
+    front_feedback = front.get("feedback") or "Sin feedback frontal."
+    lateral_feedback = lateral.get("feedback") or "Sin feedback lateral."
+    return {
+        "view": "combined",
+        "model": f"{front.get('model', 'MediaPipe Pose')} + {lateral.get('model', 'YOLO Pose')}",
+        "backend": "combined",
+        "pose_detected": bool(front.get("pose_detected")) and bool(lateral.get("pose_detected")),
+        "visible_landmarks_count": (front.get("visible_landmarks_count") or 0) + (lateral.get("visible_landmarks_count") or 0),
+        "status": status,
+        "status_label": STATUS_LABELS.get(status, status),
+        "feedback": f"Frontal: {front_feedback} Lateral: {lateral_feedback}",
+        "metrics": {
+            **(front.get("metrics") or {}),
+            **(lateral.get("metrics") or {}),
+        },
+        "components": {
+            **_prefix_components("front", front.get("components") or {}),
+            **_prefix_components("lateral", lateral.get("components") or {}),
+        },
+        "views": {
+            "front": front,
+            "lateral": lateral,
+        },
     }
 
 
@@ -160,3 +215,8 @@ class PostureAnalyzer:
             visible_landmarks_count=pose_row.get("visible_landmarks_count"),
             pose_detected=bool(pose_row.get("pose_detected")),
         )
+
+    def analyze_combined_images(self, front_image_path: str | Path, lateral_image_path: str | Path | None = None) -> dict:
+        front = self.analyze_front_image(front_image_path)
+        lateral = self.analyze_lateral_image(lateral_image_path) if lateral_image_path is not None else None
+        return combine_review_payloads(front, lateral)

@@ -210,6 +210,24 @@ code {
   font-weight: 800;
 }
 
+.settings-label.compact {
+  gap: 7px;
+  font-size: 0.82rem;
+}
+
+.settings-label select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: var(--border-width) solid var(--color-border-default);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-primary);
+  background: var(--color-card-bg);
+  font: inherit;
+  font-weight: 700;
+  box-shadow: var(--color-card-shadow);
+}
+
 .input-wrap {
   display: flex;
   align-items: center;
@@ -570,6 +588,30 @@ html[data-theme="dark"] .main-area {
   background: linear-gradient(180deg, #111827, #0b1220);
 }
 
+.dual-camera-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.camera-preview.compact {
+  height: clamp(280px, calc(100vh - 380px), 420px);
+  min-height: 280px;
+}
+
+.camera-slot-label {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: white;
+  background: rgba(15, 23, 42, 0.72);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
 .camera-preview video {
   position: absolute;
   inset: 0;
@@ -590,6 +632,15 @@ html[data-theme="dark"] .main-area {
   padding: 32px 24px;
   color: rgba(255, 255, 255, 0.86);
   text-align: center;
+}
+
+.camera-preview.compact .camera-placeholder {
+  max-width: 320px;
+  padding: 28px 18px;
+}
+
+.camera-preview.compact .camera-placeholder span {
+  font-size: 0.86rem;
 }
 
 .camera-placeholder svg {
@@ -667,11 +718,17 @@ html[data-theme="dark"] .main-area {
   white-space: nowrap;
 }
 
+.camera-preview.compact .frame-guide em {
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .camera-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  align-items: end;
+  align-items: stretch;
   margin-top: 12px;
 }
 
@@ -682,6 +739,8 @@ html[data-theme="dark"] .main-area {
 
 .camera-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
   gap: 10px;
 }
 
@@ -1694,6 +1753,7 @@ html[data-theme="dark"] .main-area {
   .meta-grid,
   .stat-grid,
   .privacy-steps,
+  .dual-camera-grid,
   .nav-list,
   .camera-toolbar,
   .cadence-options {
@@ -1892,6 +1952,7 @@ html[data-theme="dark"] .ghost-button,
 html[data-theme="dark"] .quick-users button,
 html[data-theme="dark"] .metric-selector button,
 html[data-theme="dark"] .view-switch button,
+html[data-theme="dark"] .settings-label select,
 html[data-theme="dark"] .cadence-options button,
 html[data-theme="dark"] .history-item,
 html[data-theme="dark"] .privacy-step,
