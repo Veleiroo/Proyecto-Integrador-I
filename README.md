@@ -248,4 +248,4 @@ El siguiente paso tecnico con mas sentido es ejecutar y auditar la extension lat
 - ejecutar `05_pipeline_lateral_yolo.ipynb` sobre el dataset lateral completo
 - revisar visualmente casos `Good` y `Bad` clasificados como `risk` o `improvable`
 - usar `06_calibracion_lateral_multiposture.ipynb` para recalibrar umbrales laterales de tronco
-- integrar despues la decision frontal + lateral en una lectura ergonomica conjunta
+- integrar despues la decision frontal + lateral en una lectura ergonomica conjunta (ya integrada)
