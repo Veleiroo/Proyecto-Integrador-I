@@ -6,14 +6,13 @@ import {
   BarChart3,
   Bell,
   BellOff,
-  Camera,
   CheckCircle2,
   ChevronRight,
   Clock3,
   DatabaseZap,
   EyeOff,
   FileImage,
-  ImagePlus,
+  Info,
   KeyRound,
   Loader2,
   LockKeyhole,
@@ -22,20 +21,20 @@ import {
   MonitorCheck,
   Pause,
   Play,
-  RotateCcw,
-  Send,
   Server,
   ShieldCheck,
   Sun,
+  TrendingUp,
   UserRound,
   Video,
   VideoOff,
+  X,
 } from "lucide-react";
 import "./styles.css";
 
 type ViewMode = "front" | "lateral";
 type Status = "adequate" | "improvable" | "risk" | "insufficient_data";
-type Section = "camera" | "review" | "stats" | "history" | "privacy";
+type Section = "camera" | "stats" | "history" | "privacy";
 type Theme = "light" | "dark";
 
 type ApiResult = {
@@ -81,17 +80,12 @@ type AuthSession = {
   expires_at: string;
 };
 
-const USE_LOCAL_PROXY = import.meta.env.VITE_DEV_HTTPS === "1";
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 const sectionCopy: Record<Section, { eyebrow: string; title: string }> = {
   camera: {
     eyebrow: "Monitor local",
     title: "Cámara y seguimiento ergonómico",
-  },
-  review: {
-    eyebrow: "Revisión manual",
-    title: "Revisión ergonómica por imagen",
   },
   history: {
     eyebrow: "Sesión local",
@@ -123,22 +117,66 @@ const viewCopy: Record<ViewMode, { label: string; short: string; endpoint: strin
 };
 
 const metricLabels: Record<string, string> = {
-  shoulder_tilt_deg: "Inclinación hombros",
-  shoulder_height_diff_ratio: "Desnivel hombros",
-  head_lateral_offset_ratio: "Cabeza lateral",
-  neck_tilt_deg: "Cuello frontal",
-  trunk_tilt_deg: "Tronco frontal",
+  shoulder_tilt_deg: "Inclinación de hombros",
+  shoulder_height_diff_ratio: "Desnivel de hombros",
+  head_lateral_offset_ratio: "Desplazamiento lateral de cabeza",
+  neck_tilt_deg: "Inclinación cervical frontal",
+  trunk_tilt_deg: "Inclinación frontal del tronco",
   left_elbow_angle_deg: "Codo izquierdo",
   right_elbow_angle_deg: "Codo derecho",
   head_forward_offset_ratio: "Cabeza adelantada",
-  neck_forward_tilt_deg: "Cuello lateral",
-  trunk_forward_tilt_deg: "Tronco lateral",
-  shoulder_hip_offset_ratio: "Hombro-cadera",
+  neck_forward_tilt_deg: "Inclinación cervical lateral",
+  trunk_forward_tilt_deg: "Inclinación lateral del tronco",
+  shoulder_hip_offset_ratio: "Alineación hombro-cadera",
   lateral_elbow_angle_deg: "Codo lateral",
 };
 
+const componentLabels: Record<string, string> = {
+  shoulder_tilt_status: "Inclinación de hombros",
+  shoulder_height_status: "Desnivel de hombros",
+  neck_status: "Cuello",
+  neck_tilt_status: "Inclinación cervical",
+  shoulder_status: "Hombros",
+  trunk_status: "Tronco",
+  trunk_tilt_status: "Inclinación del tronco",
+  head_status: "Cabeza y cuello",
+  head_offset_status: "Desplazamiento de cabeza",
+  head_neck_status: "Cabeza y cuello",
+  elbow_status: "Codos",
+  left_elbow_status: "Codo izquierdo",
+  right_elbow_status: "Codo derecho",
+  shoulder_hip_status: "Alineación hombro-cadera",
+  lateral_elbow_status: "Codo lateral",
+};
+
+const statusLabels: Record<string, string> = {
+  adequate: "Adecuada",
+  improvable: "Mejorable",
+  risk: "Riesgo",
+  insufficient_data: "Datos insuficientes",
+};
+
+const backendTermLabels: Record<string, string> = {
+  head: "cabeza",
+  neck: "cuello",
+  shoulder: "hombro",
+  shoulders: "hombros",
+  trunk: "tronco",
+  elbow: "codo",
+  hip: "cadera",
+  left: "izquierdo",
+  right: "derecho",
+  lateral: "lateral",
+  forward: "adelantado",
+  tilt: "inclinación",
+  offset: "desplazamiento",
+  height: "altura",
+  diff: "diferencia",
+  angle: "ángulo",
+};
+
 function normalizeApiBase(value: string) {
-  return value.trim().replace(/\/$/, "");
+  return value.trim().replace(/\/+$/, "");
 }
 
 function tone(status: Status | string) {
@@ -154,28 +192,52 @@ function formatMetric(value: number | null, key: string) {
   return value.toFixed(3);
 }
 
+function humanizeBackendKey(key: string) {
+  return key
+    .replace(/_(status|deg|ratio)$/g, "")
+    .split("_")
+    .map((term) => backendTermLabels[term] ?? term)
+    .join(" ")
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function labelMetric(key: string) {
+  return metricLabels[key] ?? humanizeBackendKey(key);
+}
+
+function labelComponent(key: string) {
+  return componentLabels[key] ?? humanizeBackendKey(key);
+}
+
+function labelStatus(status: string) {
+  return statusLabels[status] ?? humanizeBackendKey(status);
+}
+
+function isBodyComponent(key: string) {
+  return key !== "overall_status";
+}
+
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => {
     const stored = localStorage.getItem("authSession");
-    return stored ? (JSON.parse(stored) as AuthSession) : null;
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored) as AuthSession;
+    } catch {
+      localStorage.removeItem("authSession");
+      return null;
+    }
   });
   const [activeSection, setActiveSection] = useState<Section>("camera");
   const [theme, setTheme] = useState<Theme>((localStorage.getItem("theme") as Theme | null) ?? "light");
   const [apiBase, setApiBase] = useState(() => {
-    if (USE_LOCAL_PROXY) return "";
     return normalizeApiBase(localStorage.getItem("apiBase") ?? DEFAULT_API_BASE);
   });
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
-  const [view, setView] = useState<ViewMode>("front");
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
-  const [result, setResult] = useState<ApiResult | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<ReviewRecord | null>(null);
   const [history, setHistory] = useState<ReviewRecord[]>([]);
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem("notificationsEnabled") !== "false");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     localStorage.setItem("theme", theme);
@@ -217,23 +279,20 @@ function App() {
   }, [apiBase]);
 
   useEffect(() => {
-    if (!file) {
-      setPreview(null);
-      return;
-    }
-    const objectUrl = URL.createObjectURL(file);
-    setPreview(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
-
-  useEffect(() => {
     localStorage.setItem("notificationsEnabled", String(notificationsEnabled));
   }, [notificationsEnabled]);
 
-  const metrics = useMemo(() => Object.entries(result?.metrics ?? {}).filter(([, value]) => value !== null), [result]);
-  const selectedView = viewCopy[view];
   const activeCopy = sectionCopy[activeSection];
-  const authHeaders = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+  const isDev = session?.user.role === "dev";
+  const accessToken = session?.access_token;
+  const authHeaders = useMemo<Record<string, string>>(
+    () => {
+      const headers: Record<string, string> = {};
+      if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+      return headers;
+    },
+    [accessToken],
+  );
 
   useEffect(() => {
     if (!session) return;
@@ -242,35 +301,40 @@ function App() {
 
   async function refreshUserData() {
     if (!session) return;
-    const [historyResponse, statsResponse] = await Promise.all([
-      fetch(`${apiBase}/api/analyses?limit=30`, { headers: authHeaders }),
-      fetch(`${apiBase}/api/summary`, { headers: authHeaders }),
-    ]);
-    if (historyResponse.ok) {
-      const body = await historyResponse.json();
-      setHistory(
-        body.items.map((item: ApiResult & { id: number; created_at: string }) => ({
-          ...item,
-          id: item.id,
-          fileName: `Captura ${item.id}`,
-          createdAt: item.created_at,
-        })),
-      );
-    }
-    if (statsResponse.ok) {
-      setStats(await statsResponse.json());
+    try {
+      const [historyResponse, statsResponse] = await Promise.all([
+        fetch(`${apiBase}/api/analyses?limit=30`, { headers: authHeaders }),
+        fetch(`${apiBase}/api/summary`, { headers: authHeaders }),
+      ]);
+      if (historyResponse.ok) {
+        const body = await historyResponse.json();
+        setHistory(
+          body.items.map((item: ApiResult & { id: number; created_at: string }) => ({
+            ...item,
+            id: item.id,
+            fileName: `Captura ${item.id}`,
+            createdAt: item.created_at,
+          })),
+        );
+      }
+      if (statsResponse.ok) {
+        setStats(await statsResponse.json());
+      }
+    } catch {
+      setApiOnline(false);
     }
   }
 
   function pushAnalysis(nextResult: ApiResult & { id?: number; created_at?: string }, fileName: string) {
-    setResult(nextResult);
+    const nextRecord: ReviewRecord = {
+      ...nextResult,
+      id: nextResult.id ?? crypto.randomUUID(),
+      fileName,
+      createdAt: nextResult.created_at ?? new Date().toISOString(),
+    };
+    setSelectedRecord(nextRecord);
     setHistory((items) => [
-      {
-        ...nextResult,
-        id: nextResult.id ?? crypto.randomUUID(),
-        fileName,
-        createdAt: nextResult.created_at ?? new Date().toISOString(),
-      },
+      nextRecord,
       ...items.slice(0, 29),
     ]);
     refreshUserData();
@@ -284,43 +348,6 @@ function App() {
     }
   }
 
-  async function analyzeImage() {
-    if (!file) return;
-    setIsLoading(true);
-    setError(null);
-    setResult(null);
-
-    const payload = new FormData();
-    payload.append("file", file);
-
-    try {
-      const response = await fetch(`${apiBase}${selectedView.endpoint}`, {
-        method: "POST",
-        headers: authHeaders,
-        body: payload,
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.detail ?? `Error ${response.status}`);
-      }
-      const nextResult = (await response.json()) as ApiResult & { id?: number; created_at?: string };
-      pushAnalysis(nextResult, file.name);
-      notifyAnalysis(nextResult);
-      setApiOnline(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo analizar la imagen.");
-      setApiOnline(false);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  function resetImage() {
-    setFile(null);
-    setResult(null);
-    setError(null);
-  }
-
   async function logout() {
     if (session) {
       await fetch(`${apiBase}/api/auth/logout`, {
@@ -330,7 +357,7 @@ function App() {
     }
     setSession(null);
     setHistory([]);
-    setResult(null);
+    setSelectedRecord(null);
   }
 
   if (!session) {
@@ -360,19 +387,20 @@ function App() {
 
         <nav className="nav-list">
           <NavButton active={activeSection === "camera"} icon={<MonitorCheck />} label="Cámara" onClick={() => setActiveSection("camera")} />
-          <NavButton active={activeSection === "review"} icon={<Camera />} label="Revisión" onClick={() => setActiveSection("review")} />
           <NavButton active={activeSection === "stats"} icon={<BarChart3 />} label="Estadísticas" onClick={() => setActiveSection("stats")} />
           <NavButton active={activeSection === "history"} icon={<BarChart3 />} label="Historial local" onClick={() => setActiveSection("history")} />
-          <NavButton active={activeSection === "privacy"} icon={<ShieldCheck />} label="Privacidad" onClick={() => setActiveSection("privacy")} />
+          <NavButton active={activeSection === "privacy"} icon={<ShieldCheck />} label="Información" onClick={() => setActiveSection("privacy")} />
         </nav>
 
-        <div className={`connection-card ${apiOnline ? "online" : "offline"}`}>
-          <Server size={18} />
-          <div>
-            <strong>{apiOnline ? "Backend conectado" : "Backend no disponible"}</strong>
-            <span>{apiBase}</span>
+        {isDev && (
+          <div className={`connection-card ${apiOnline ? "online" : "offline"}`}>
+            <Server size={18} />
+            <div>
+              <strong>{apiOnline ? "Backend conectado" : "Backend no disponible"}</strong>
+              <span>{apiBase}</span>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="sidebar-actions">
           <ThemeButton theme={theme} onToggle={() => setTheme((current) => (current === "light" ? "dark" : "light"))} />
@@ -411,80 +439,11 @@ function App() {
             }}
           />
         )}
-        {activeSection === "review" && (
-          <section className="review-layout">
-            <div className="left-column">
-              <div className="view-switch">
-                {(Object.keys(viewCopy) as ViewMode[]).map((mode) => (
-                  <button
-                    key={mode}
-                    className={view === mode ? "active" : ""}
-                    type="button"
-                    onClick={() => {
-                      setView(mode);
-                      setResult(null);
-                      setError(null);
-                    }}
-                  >
-                    <strong>{viewCopy[mode].label}</strong>
-                    <span>{viewCopy[mode].short}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="upload-card">
-                <div
-                  className={`dropzone ${preview ? "with-preview" : ""}`}
-                  onClick={() => inputRef.current?.click()}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    setFile(event.dataTransfer.files?.[0] ?? null);
-                    setResult(null);
-                    setError(null);
-                  }}
-                >
-                  <input ref={inputRef} type="file" accept="image/*" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-                  {preview ? (
-                    <img src={preview} alt="Imagen seleccionada" />
-                  ) : (
-                    <div className="empty-upload">
-                      <ImagePlus size={38} />
-                      <strong>Sube una imagen {view === "front" ? "frontal" : "lateral"}</strong>
-                      <span>Arrastra el archivo aquí o pulsa para seleccionarlo</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="upload-actions">
-                  <button className="ghost-button" type="button" onClick={resetImage} disabled={!file}>
-                    <RotateCcw size={17} />
-                    Limpiar
-                  </button>
-                  <button className="primary-button" type="button" onClick={analyzeImage} disabled={!file || isLoading}>
-                    {isLoading ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
-                    Analizar imagen
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <aside className="result-column">
-              {error ? (
-                <Message title="No se pudo analizar" body={error} />
-              ) : result ? (
-                <ResultPanel result={result} metrics={metrics} />
-              ) : (
-                <EmptyResult view={view} />
-              )}
-            </aside>
-          </section>
-        )}
-
-        {activeSection === "history" && <HistoryPanel history={history} />}
-        {activeSection === "stats" && <StatsPanel stats={stats} history={history} />}
-        {activeSection === "privacy" && <PrivacyPanel apiBase={apiBase} setApiBase={setApiBase} />}
+        {activeSection === "history" && <HistoryPanel history={history} onSelect={setSelectedRecord} />}
+        {activeSection === "stats" && <StatsPanel stats={stats} history={history} onSelect={setSelectedRecord} />}
+        {activeSection === "privacy" && <PrivacyPanel apiBase={apiBase} setApiBase={setApiBase} isDev={isDev} />}
       </section>
+      {selectedRecord && <AnalysisDetail record={selectedRecord} onClose={() => setSelectedRecord(null)} />}
     </main>
   );
 }
@@ -590,13 +549,16 @@ function LoginScreen({
               Técnico
             </button>
           </div>
-          <label>
-            API local
-            <div className="input-wrap">
-              <Server size={17} />
-              <input value={apiBase} onChange={(event) => setApiBase(normalizeApiBase(event.target.value))} />
-            </div>
-          </label>
+          <details className="advanced-login">
+            <summary>Conexión avanzada</summary>
+            <label>
+              API local
+              <div className="input-wrap">
+                <Server size={17} />
+                <input value={apiBase} onChange={(event) => setApiBase(normalizeApiBase(event.target.value))} />
+              </div>
+            </label>
+          </details>
           {loginError && <div className="login-error">{loginError}</div>}
           <button className="primary-button full" type="submit" disabled={!username || !password || isSubmitting}>
             {isSubmitting ? <Loader2 className="spin" size={18} /> : <ChevronRight size={18} />}
@@ -661,6 +623,10 @@ function CameraPanel({
   }, []);
 
   async function startCamera() {
+    if (streamRef.current && videoRef.current?.srcObject) {
+      setCameraState("ready");
+      return true;
+    }
     setCameraState("loading");
     setCameraError(null);
     try {
@@ -722,6 +688,7 @@ function CameraPanel({
     });
     if (!response.ok) {
       const body = await response.json().catch(() => null);
+      setCaptureStatus(body?.detail ?? `Error ${response.status}`);
       throw new Error(body?.detail ?? `Error ${response.status}`);
     }
     const analysis = (await response.json()) as ApiResult & { id?: number; created_at?: string };
@@ -910,8 +877,7 @@ function CameraPanel({
         <section className="text-block">
           <h2>Segundo plano</h2>
           <p>
-            La sesión queda preparada para capturar fotogramas periódicos y analizarlos en este equipo cuando
-            conectemos el worker local de monitorización.
+            La sesión captura fotogramas periódicos y los analiza contra el backend local sin guardar las imágenes.
           </p>
         </section>
       </aside>
@@ -957,7 +923,7 @@ function ResultPanel({ result, metrics }: { result: ApiResult; metrics: [string,
       </div>
 
       <section className="text-block">
-        <h2>Review</h2>
+        <h2>Evaluación</h2>
         <p>{result.feedback}</p>
       </section>
 
@@ -968,7 +934,7 @@ function ResultPanel({ result, metrics }: { result: ApiResult; metrics: [string,
         </div>
         {metrics.map(([key, value]) => (
           <div className="data-row" key={key}>
-            <span>{metricLabels[key] ?? key}</span>
+            <span>{labelMetric(key)}</span>
             <strong>{formatMetric(value, key)}</strong>
           </div>
         ))}
@@ -978,10 +944,10 @@ function ResultPanel({ result, metrics }: { result: ApiResult; metrics: [string,
         <div className="section-title">
           <h2>Componentes</h2>
         </div>
-        {Object.entries(result.components).map(([key, value]) => (
+        {Object.entries(result.components).filter(([key]) => isBodyComponent(key)).map(([key, value]) => (
           <div className="component-row" key={key}>
-            <span>{key.replaceAll("_", " ")}</span>
-            <strong className={tone(value)}>{value}</strong>
+            <span>{labelComponent(key)}</span>
+            <strong className={tone(value)}>{labelStatus(value)}</strong>
           </div>
         ))}
       </section>
@@ -1020,20 +986,91 @@ function Message({ title, body }: { title: string; body: string }) {
   );
 }
 
-function StatsPanel({ stats, history }: { stats: StatsSummary | null; history: ReviewRecord[] }) {
+function metricTrendLabel(delta: number | null, key: string) {
+  if (delta === null) return "Sin tendencia";
+  const formatted = formatMetric(Math.abs(delta), key);
+  if (Math.abs(delta) < 0.01) return "Estable";
+  return delta > 0 ? `Sube ${formatted}` : `Baja ${formatted}`;
+}
+
+function buildHistoricRecommendations(history: ReviewRecord[], selectedMetric: string | null) {
+  if (history.length === 0) {
+    return ["Realiza varias capturas durante la jornada para detectar patrones reales antes de tomar decisiones."];
+  }
+  const recent = history.slice(0, 20);
+  const riskCount = recent.filter((item) => item.status === "risk").length;
+  const improvableCount = recent.filter((item) => item.status === "improvable").length;
+  const componentCounts = new Map<string, number>();
+  recent.forEach((item) => {
+    Object.entries(item.components).forEach(([component, status]) => {
+      if (isBodyComponent(component) && (status === "risk" || status === "improvable")) {
+        componentCounts.set(component, (componentCounts.get(component) ?? 0) + 1);
+      }
+    });
+  });
+  const topComponent = [...componentCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const recommendations: string[] = [];
+  if (topComponent) {
+    recommendations.push(
+      `${labelComponent(topComponent[0])} aparece como foco recurrente en ${topComponent[1]} de las últimas ${recent.length} capturas.`,
+    );
+  }
+  if (riskCount > 0) {
+    recommendations.push(`Hay ${riskCount} ${riskCount === 1 ? "captura reciente" : "capturas recientes"} en riesgo: conviene revisar el puesto antes de alargar la sesión.`);
+  } else if (improvableCount > 0) {
+    recommendations.push(`Predominan avisos mejorables (${improvableCount}). Ajustes pequeños y constantes deberían estabilizar la tendencia.`);
+  } else {
+    recommendations.push("Las capturas recientes son estables. Mantén pausas cortas y evita sostener la misma postura demasiado tiempo.");
+  }
+  if (selectedMetric) {
+    const points = history
+      .filter((item) => typeof item.metrics[selectedMetric] === "number")
+      .slice()
+      .reverse();
+    if (points.length >= 2) {
+      const first = points[0].metrics[selectedMetric] as number;
+      const last = points[points.length - 1].metrics[selectedMetric] as number;
+      const label = labelMetric(selectedMetric);
+      const delta = last - first;
+      if (Math.abs(delta) >= 0.01) {
+        recommendations.push(`${label}: ${delta > 0 ? "empeora o aumenta" : "mejora o disminuye"} respecto a la primera medición disponible (${formatMetric(Math.abs(delta), selectedMetric)}).`);
+      }
+    }
+  }
+  return recommendations.slice(0, 4);
+}
+
+function StatsPanel({ stats, history, onSelect }: { stats: StatsSummary | null; history: ReviewRecord[]; onSelect: (record: ReviewRecord) => void }) {
   const period = stats?.periods?.last_7_days;
+  const periodTotal = period?.total ?? 0;
   const adequatePercent = Math.round((period?.adequate_ratio ?? 0) * 100);
-  const maxDay = Math.max(...(stats?.timeline ?? []).map((item) => item.total), 1);
-  
-  // Generate mock data if no stats yet for better visual
-  const mockTimeline = stats?.timeline?.length ? stats.timeline : Array.from({ length: 7 }, (_, i) => ({
-    date: new Date(Date.now() - (6 - i) * 86400000).toISOString().split('T')[0],
-    total: Math.floor(Math.random() * 8) + 1,
-    adequate: Math.floor(Math.random() * 5),
-    improvable: Math.floor(Math.random() * 4),
-    risk: Math.floor(Math.random() * 2),
-  }));
-  const mockMaxDay = Math.max(...mockTimeline.map((item) => item.total), 1);
+  const improvablePercent = periodTotal > 0 ? Math.round(((period?.improvable_count ?? 0) / periodTotal) * 100) : 0;
+  const riskPercent = periodTotal > 0 ? Math.round(((period?.risk_count ?? 0) / periodTotal) * 100) : 0;
+  const timeline = stats?.timeline ?? [];
+  const maxDay = Math.max(...timeline.map((item) => item.total), 1);
+  const metricOptions = useMemo(
+    () => [...new Set(history.flatMap((item) => Object.entries(item.metrics).filter(([, value]) => typeof value === "number").map(([key]) => key)))],
+    [history],
+  );
+  const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const activeMetric = selectedMetric && metricOptions.includes(selectedMetric) ? selectedMetric : metricOptions[0] ?? null;
+  const metricPoints = useMemo(
+    () =>
+      activeMetric
+        ? history
+            .filter((item) => typeof item.metrics[activeMetric] === "number")
+            .slice()
+            .reverse()
+            .slice(-14)
+        : [],
+    [activeMetric, history],
+  );
+  const metricValues = metricPoints.map((item) => item.metrics[activeMetric ?? ""] as number);
+  const minMetric = Math.min(...metricValues, 0);
+  const maxMetric = Math.max(...metricValues, 1);
+  const metricRange = maxMetric - minMetric || 1;
+  const metricDelta = metricValues.length >= 2 ? metricValues[metricValues.length - 1] - metricValues[0] : null;
+  const recommendations = buildHistoricRecommendations(history, activeMetric);
   
   return (
     <section className="stats-layout">
@@ -1043,33 +1080,55 @@ function StatsPanel({ stats, history }: { stats: StatsSummary | null; history: R
             <p className="eyebrow">Últimos 7 días</p>
             <h2>Resumen de postura</h2>
           </div>
-          <span>{period?.total ?? 0} capturas</span>
+          <span>{periodTotal} capturas</span>
         </div>
         <div className="stat-grid">
           <StatTile label="Adecuadas" value={`${adequatePercent}%`} />
-          <StatTile label="Mejorables" value={String(period?.improvable_count ?? 0)} />
-          <StatTile label="Riesgo" value={String(period?.risk_count ?? 0)} />
+          <StatTile label="Mejorables" value={`${improvablePercent}%`} />
+          <StatTile label="Riesgo" value={`${riskPercent}%`} />
         </div>
         <div className="timeline-chart">
-          {mockTimeline.slice(-14).map((item) => (
-            <div className="timeline-day" key={item.date}>
-              <span style={{ height: `${Math.max(8, (item.total / mockMaxDay) * 100)}%` }} />
-              <small>{new Date(item.date).toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" })}</small>
-            </div>
-          ))}
-          {!mockTimeline?.length && <p className="panel-note">Aún no hay capturas suficientes para mostrar una tendencia.</p>}
+          <TimelineChart timeline={timeline.slice(-14)} maxDay={maxDay} />
+          {timeline.length === 0 && <p className="panel-note">Aún no hay capturas suficientes para mostrar una tendencia.</p>}
         </div>
+        {timeline.length > 0 && <StatusLegend />}
+      </div>
+
+      <div className="content-card">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Tendencia corporal</p>
+            <h2>Evolución por métrica</h2>
+          </div>
+          <span>{activeMetric ? metricTrendLabel(metricDelta, activeMetric) : "Sin datos"}</span>
+        </div>
+        <div className="metric-selector">
+          {metricOptions.length > 0 ? (
+            metricOptions.map((key) => (
+              <button className={activeMetric === key ? "active" : ""} key={key} type="button" onClick={() => setSelectedMetric(key)}>
+                {labelMetric(key)}
+              </button>
+            ))
+          ) : (
+            <p className="panel-note">Cuando haya métricas suficientes podrás elegir la parte del cuerpo a analizar.</p>
+          )}
+        </div>
+        <div className="trend-chart">
+          <MetricTrendChart activeMetric={activeMetric} maxMetric={maxMetric} metricPoints={metricPoints} metricRange={metricRange} minMetric={minMetric} onSelect={onSelect} />
+          {metricPoints.length === 0 && <p className="panel-note">Aún no hay puntos suficientes para mostrar una tendencia corporal.</p>}
+        </div>
+        {metricPoints.length > 0 && <StatusLegend />}
       </div>
 
       <div className="content-card">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Feedback</p>
-            <h2>Recomendaciones</h2>
+            <h2>Recomendaciones basadas en histórico</h2>
           </div>
         </div>
         <div className="recommendation-list">
-          {(stats?.recommendations ?? ["Realiza varias capturas durante la jornada para generar recomendaciones personalizadas."]).map((item) => (
+          {recommendations.map((item) => (
             <p key={item}>{item}</p>
           ))}
         </div>
@@ -1085,14 +1144,14 @@ function StatsPanel({ stats, history }: { stats: StatsSummary | null; history: R
         </div>
         <div className="history-list compact">
           {history.slice(0, 6).map((item) => (
-            <article className="history-item" key={item.id}>
+            <button className="history-item" key={item.id} type="button" onClick={() => onSelect(item)}>
               <div className={`history-status ${tone(item.status)}`} />
               <div>
                 <strong>{item.status_label}</strong>
                 <span>{new Date(item.createdAt).toLocaleString()} · {viewCopy[item.view].label}</span>
               </div>
               <em>{item.pose_detected ? "Pose detectada" : "Sin pose"}</em>
-            </article>
+            </button>
           ))}
           {history.length === 0 && (
             <div className="empty-result">
@@ -1106,6 +1165,99 @@ function StatsPanel({ stats, history }: { stats: StatsSummary | null; history: R
   );
 }
 
+function TimelineChart({ timeline, maxDay }: { timeline: StatsSummary["timeline"]; maxDay: number }) {
+  if (timeline.length === 0) return null;
+  return (
+    <div className="timeline-bars">
+      {timeline.map((item) => {
+        const adequateHeight = (item.adequate / maxDay) * 100;
+        const improvableHeight = (item.improvable / maxDay) * 100;
+        const riskHeight = (item.risk / maxDay) * 100;
+        return (
+          <div className="timeline-day" key={item.date}>
+            <div className="stacked-bar" title={`${item.total} capturas`}>
+              <span className="risk-segment" style={{ height: `${riskHeight}%` }} />
+              <span className="warn-segment" style={{ height: `${improvableHeight}%` }} />
+              <span className="ok-segment" style={{ height: `${adequateHeight}%` }} />
+            </div>
+            <small>{new Date(item.date).toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" })}</small>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatusLegend() {
+  return (
+    <div className="status-legend" aria-label="Leyenda de estados">
+      <span><i className="ok-segment" /> Adecuada</span>
+      <span><i className="warn-segment" /> Mejorable</span>
+      <span><i className="risk-segment" /> Riesgo</span>
+    </div>
+  );
+}
+
+function MetricTrendChart({
+  activeMetric,
+  maxMetric,
+  metricPoints,
+  metricRange,
+  minMetric,
+  onSelect,
+}: {
+  activeMetric: string | null;
+  maxMetric: number;
+  metricPoints: ReviewRecord[];
+  metricRange: number;
+  minMetric: number;
+  onSelect: (record: ReviewRecord) => void;
+}) {
+  if (!activeMetric || metricPoints.length === 0) return null;
+  const width = 420;
+  const height = 170;
+  const paddingX = 18;
+  const paddingY = 18;
+  const plotWidth = width - paddingX * 2;
+  const plotHeight = height - paddingY * 2;
+  const points = metricPoints.map((item, index) => {
+    const value = item.metrics[activeMetric] as number;
+    const x = paddingX + (metricPoints.length === 1 ? plotWidth / 2 : (index / (metricPoints.length - 1)) * plotWidth);
+    const y = paddingY + plotHeight - ((value - minMetric) / metricRange) * plotHeight;
+    return { item, value, x, y };
+  });
+  const path = points.map((point) => `${point.x},${point.y}`).join(" ");
+  return (
+    <div className="metric-trend">
+      <div className="trend-scale">
+        <span>{formatMetric(maxMetric, activeMetric)}</span>
+        <span>{formatMetric(minMetric, activeMetric)}</span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Tendencia de ${labelMetric(activeMetric)}`}>
+        <line className="trend-grid-line" x1={paddingX} x2={width - paddingX} y1={paddingY} y2={paddingY} />
+        <line className="trend-grid-line" x1={paddingX} x2={width - paddingX} y1={height / 2} y2={height / 2} />
+        <line className="trend-grid-line" x1={paddingX} x2={width - paddingX} y1={height - paddingY} y2={height - paddingY} />
+        <polyline className="trend-line" fill="none" points={path} />
+        {points.map((point) => (
+          <g className="trend-dot-button" key={point.item.id} role="button" tabIndex={0} onClick={() => onSelect(point.item)} onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") onSelect(point.item);
+          }}>
+            <circle className={`trend-dot ${tone(point.item.status)}`} cx={point.x} cy={point.y} r="6" />
+            <title>{formatMetric(point.value, activeMetric)}</title>
+          </g>
+        ))}
+      </svg>
+      <div className="trend-labels">
+        {points.map((point) => (
+          <button key={point.item.id} type="button" onClick={() => onSelect(point.item)}>
+            {new Date(point.item.createdAt).toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" })}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="stat-tile">
@@ -1115,7 +1267,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function HistoryPanel({ history }: { history: ReviewRecord[] }) {
+function HistoryPanel({ history, onSelect }: { history: ReviewRecord[]; onSelect: (record: ReviewRecord) => void }) {
   return (
     <section className="content-card">
       <div className="section-heading">
@@ -1133,14 +1285,14 @@ function HistoryPanel({ history }: { history: ReviewRecord[] }) {
       ) : (
         <div className="history-list">
           {history.map((item) => (
-            <article className="history-item" key={item.id}>
+            <button className="history-item" key={item.id} type="button" onClick={() => onSelect(item)}>
               <div className={`history-status ${tone(item.status)}`} />
               <div>
                 <strong>{item.fileName}</strong>
                 <span>{new Date(item.createdAt).toLocaleString()} · {viewCopy[item.view].label}</span>
               </div>
               <em>{item.status_label}</em>
-            </article>
+            </button>
           ))}
         </div>
       )}
@@ -1148,7 +1300,7 @@ function HistoryPanel({ history }: { history: ReviewRecord[] }) {
   );
 }
 
-function PrivacyPanel({ apiBase, setApiBase }: { apiBase: string; setApiBase: (value: string) => void }) {
+function PrivacyPanel({ apiBase, setApiBase, isDev }: { apiBase: string; setApiBase: (value: string) => void; isDev: boolean }) {
   return (
     <section className="privacy-grid">
       <div className="content-card">
@@ -1168,23 +1320,34 @@ function PrivacyPanel({ apiBase, setApiBase }: { apiBase: string; setApiBase: (v
       <div className="content-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Conexión</p>
-            <h2>API local</h2>
+            <p className="eyebrow">{isDev ? "Conexión" : "Dudas frecuentes"}</p>
+            <h2>{isDev ? "API local" : "Qué significan los datos"}</h2>
           </div>
         </div>
-        <label className="settings-label">
-          URL de la aplicación local
-          <div className="input-wrap">
-            <Server size={17} />
-            <input value={apiBase} onChange={(event) => setApiBase(normalizeApiBase(event.target.value))} />
+        {isDev ? (
+          <>
+            <label className="settings-label">
+              URL de la aplicación local
+              <div className="input-wrap">
+                <Server size={17} />
+                <input value={apiBase} onChange={(event) => setApiBase(normalizeApiBase(event.target.value))} />
+              </div>
+            </label>
+            <div className="deployment-note">
+              <FileImage size={20} />
+              <p>
+                Usa <code>http://localhost:8000</code> en el mismo equipo o <code>http://IP_DEL_HOST:8000</code> desde otro dispositivo de la misma red.
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="privacy-steps single">
+            <PrivacyStep title="Estado global" text="Resume la peor señal detectada en la captura. Riesgo no es diagnóstico médico; indica que conviene ajustar postura o puesto." />
+            <PrivacyStep title="Métricas" text="Son medidas geométricas extraídas de puntos corporales visibles. Si faltan puntos, la captura puede aparecer como datos insuficientes." />
+            <PrivacyStep title="Historial" text="Permite revisar cada captura y entender qué componente provocó el aviso, sin guardar la imagen original." />
+            <PrivacyStep title="Recomendaciones" text="Se generan a partir de patrones repetidos, no de una captura aislada. Cuantas más capturas haya, más útiles serán." />
           </div>
-        </label>
-        <div className="deployment-note">
-          <FileImage size={20} />
-          <p>
-            En modo HTTP puedes usar <code>http://localhost:8000</code> o <code>http://IP_DEL_HOST:8000</code>. En modo HTTPS de desarrollo deja este campo vacío para usar el proxy local de Vite y evitar bloqueos de contenido mixto.
-          </p>
-        </div>
+        )}
       </div>
     </section>
   );
@@ -1195,6 +1358,33 @@ function PrivacyStep({ title, text }: { title: string; text: string }) {
     <div className="privacy-step">
       <strong>{title}</strong>
       <p>{text}</p>
+    </div>
+  );
+}
+
+function AnalysisDetail({ record, onClose }: { record: ReviewRecord; onClose: () => void }) {
+  const metrics = Object.entries(record.metrics ?? {}).filter(([, value]) => value !== null);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+  return (
+    <div className="detail-backdrop" role="presentation" onClick={onClose}>
+      <section className="detail-panel" role="dialog" aria-modal="true" aria-label="Detalle de captura" onClick={(event) => event.stopPropagation()}>
+        <header className="detail-header">
+          <div>
+            <p className="eyebrow">{new Date(record.createdAt).toLocaleString()} · {viewCopy[record.view].label}</p>
+            <h2>{record.fileName}</h2>
+          </div>
+          <button className="theme-button compact" type="button" onClick={onClose} aria-label="Cerrar detalle">
+            <X size={17} />
+          </button>
+        </header>
+        <ResultPanel result={record} metrics={metrics} />
+      </section>
     </div>
   );
 }

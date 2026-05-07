@@ -58,7 +58,7 @@ def _pick_statuses(analysis: dict) -> dict[str, str]:
     return {
         key: value
         for key, value in analysis.items()
-        if key.endswith("_status") and isinstance(value, str)
+        if key.endswith("_status") and key != "overall_status" and isinstance(value, str)
     }
 
 

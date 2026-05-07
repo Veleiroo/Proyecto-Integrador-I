@@ -15,6 +15,16 @@ def _bool_env(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _int_env(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 @dataclass(frozen=True)
 class AppConfig:
     database_path: Path
@@ -23,6 +33,7 @@ class AppConfig:
     yolo_device: str
     allowed_origins: list[str]
     seed_default_users: bool
+    max_upload_bytes: int
 
 
 def _load_or_create_local_secret(database_path: Path) -> str:
@@ -50,4 +61,5 @@ def load_app_config() -> AppConfig:
         yolo_device=os.getenv("YOLO_DEVICE", "auto"),
         allowed_origins=[origin.strip() for origin in raw_origins.split(",") if origin.strip()],
         seed_default_users=_bool_env("ERGONOMICS_SEED_DEFAULT_USERS", default=True),
+        max_upload_bytes=_int_env("ERGONOMICS_MAX_UPLOAD_MB", 8) * 1024 * 1024,
     )

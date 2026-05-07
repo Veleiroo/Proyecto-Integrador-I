@@ -15,6 +15,7 @@ from .app_config import AppConfig, load_app_config
 from .app_security import PasswordHasher, PayloadCipher, create_session_token
 from .app_service import PostureAnalyzer
 from .app_storage import AppStorage
+from .paths import MEDIAPIPE_TASK_MODEL_PATH, YOLO_POSE_WEIGHTS_PATH
 
 
 class RegisterRequest(BaseModel):
@@ -138,9 +139,14 @@ def _validate_upload(file: UploadFile) -> None:
 
 async def _save_upload(file: UploadFile) -> Path:
     _validate_upload(file)
+    content = await file.read()
+    max_bytes = app.state.config.max_upload_bytes
+    if len(content) > max_bytes:
+        max_mb = max_bytes / (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"La imagen supera el límite de {max_mb:.0f} MB.")
     suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(await file.read())
+        tmp.write(content)
         return Path(tmp.name)
 
 
@@ -181,6 +187,11 @@ def health() -> dict:
         "auth_required": config.require_auth,
         "mode": "local-first",
         "default_users_seeded": config.seed_default_users,
+        "max_upload_mb": round(config.max_upload_bytes / (1024 * 1024), 1),
+        "models_available": {
+            "front": MEDIAPIPE_TASK_MODEL_PATH.exists(),
+            "lateral": YOLO_POSE_WEIGHTS_PATH.exists(),
+        },
     }
 
 

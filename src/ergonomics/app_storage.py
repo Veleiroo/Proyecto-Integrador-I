@@ -430,4 +430,19 @@ class AppStorage:
             average = sum(metric_values["head_lateral_offset_ratio"]) / len(metric_values["head_lateral_offset_ratio"])
             if average >= 0.08:
                 recommendations.append("La cabeza aparece desplazada respecto al eje corporal. Revisa que camara, pantalla y silla esten alineadas.")
+        trend_labels = {
+            "neck_tilt_deg": "inclinacion cervical",
+            "shoulder_tilt_deg": "inclinacion de hombros",
+            "trunk_tilt_deg": "inclinacion de tronco",
+            "head_forward_offset_ratio": "cabeza adelantada",
+            "trunk_forward_tilt_deg": "tronco lateral",
+        }
+        for key, label in trend_labels.items():
+            values = list(reversed(metric_values.get(key, [])))
+            if len(values) >= 3:
+                delta = values[-1] - values[0]
+                if abs(delta) >= (2.0 if key.endswith("_deg") else 0.03):
+                    direction = "aumenta" if delta > 0 else "disminuye"
+                    recommendations.append(f"La {label} {direction} en el historico reciente. Revisa si el cambio coincide con fatiga o ajustes del puesto.")
+                    break
         return recommendations[:4]
