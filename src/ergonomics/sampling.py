@@ -89,7 +89,7 @@ def select_execution_records(
         return pd.DataFrame(columns=["image_path", "group", "split"])
 
     # --- LÓGICA DE RECORTE (MAX_IMAGES) ---
-    # Si la muestra es más grande que el límite máximo, recortamos de forma inteligente
+    # Si la muestra es más grande que el límite máximo, recortamos manteniendo variedad.
     if max_images is not None and max_images < len(sample_df):
         rng = random.Random(seed)
         records = sample_df.to_dict(orient="records")

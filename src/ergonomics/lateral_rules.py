@@ -9,9 +9,16 @@ from .posture_rules import SEVERITY_ORDER
 LATERAL_SIDES = ("left", "right")
 
 
-def _is_visible(row: dict | pd.Series, landmark_name: str, threshold: float = 0.3) -> bool:
+def _visibility(row: dict | pd.Series, landmark_name: str) -> float | None:
     value = row.get(f"{landmark_name}_visibility")
-    return value is not None and not pd.isna(value) and float(value) >= threshold
+    if value is None or pd.isna(value):
+        return None
+    return float(value)
+
+
+def _is_visible(row: dict | pd.Series, landmark_name: str, threshold: float = 0.3) -> bool:
+    value = _visibility(row, landmark_name)
+    return value is not None and value >= threshold
 
 
 def _point(row: dict | pd.Series, landmark_name: str, threshold: float = 0.3) -> tuple[float, float] | None:
@@ -74,6 +81,74 @@ def _severity_from_target_deviation(
     return "risk"
 
 
+def _cap_severity(status: str, max_status: str) -> str:
+    return status if SEVERITY_ORDER[status] <= SEVERITY_ORDER[max_status] else max_status
+
+
+def _segment_ratio(
+    point_a: tuple[float, float] | None,
+    point_b: tuple[float, float] | None,
+    reference_length: float | None,
+) -> float | None:
+    if point_a is None or point_b is None or reference_length is None or reference_length <= 0:
+        return None
+    return _distance(point_a, point_b) / reference_length
+
+
+def _valid_lateral_torso(
+    row: dict | pd.Series,
+    side: str,
+    shoulder: tuple[float, float] | None,
+    hip: tuple[float, float] | None,
+    torso_length: float | None,
+    visibility_threshold: float,
+) -> bool:
+    if shoulder is None or hip is None or torso_length is None:
+        return False
+    shoulder_visibility = _visibility(row, f"{side}_shoulder") or 0.0
+    hip_visibility = _visibility(row, f"{side}_hip") or 0.0
+    if shoulder_visibility < max(visibility_threshold, 0.45) or hip_visibility < max(visibility_threshold, 0.45):
+        return False
+    vertical_delta = hip[1] - shoulder[1]
+    if vertical_delta < 0.12:
+        return False
+    if not 0.16 <= torso_length <= 0.46:
+        return False
+    # Cuando la supuesta cadera queda demasiado desplazada horizontalmente, suele ser silla, mesa o respaldo.
+    if abs(shoulder[0] - hip[0]) / torso_length > 0.38:
+        return False
+    return True
+
+
+def _valid_lateral_elbow_chain(
+    row: dict | pd.Series,
+    side: str,
+    shoulder: tuple[float, float] | None,
+    elbow: tuple[float, float] | None,
+    wrist: tuple[float, float] | None,
+    torso_length: float | None,
+    visibility_threshold: float,
+) -> bool:
+    if shoulder is None or elbow is None or wrist is None or torso_length is None:
+        return False
+    elbow_visibility = _visibility(row, f"{side}_elbow") or 0.0
+    wrist_visibility = _visibility(row, f"{side}_wrist") or 0.0
+    if elbow_visibility < max(visibility_threshold, 0.45) or wrist_visibility < max(visibility_threshold, 0.45):
+        return False
+    upper_arm_ratio = _segment_ratio(shoulder, elbow, torso_length)
+    forearm_ratio = _segment_ratio(elbow, wrist, torso_length)
+    if upper_arm_ratio is None or forearm_ratio is None:
+        return False
+    if not 0.28 <= upper_arm_ratio <= 1.35:
+        return False
+    if not 0.28 <= forearm_ratio <= 1.55:
+        return False
+    # Evita aceptar puntos claramente fuera de la cadena corporal por silla/mesa.
+    if abs(upper_arm_ratio - forearm_ratio) > 1.0:
+        return False
+    return True
+
+
 def _choose_lateral_side(row: dict | pd.Series, visibility_threshold: float) -> str | None:
     scores: dict[str, float] = {}
     for side in LATERAL_SIDES:
@@ -103,6 +178,8 @@ def extract_lateral_posture_metrics(row: dict | pd.Series, visibility_threshold:
             "lateral_side": None,
             "lateral_chain_ready": False,
             "lateral_torso_length": None,
+            "lateral_torso_valid": False,
+            "lateral_elbow_chain_valid": False,
             "head_forward_offset_ratio": None,
             "neck_forward_tilt_deg": None,
             "trunk_forward_tilt_deg": None,
@@ -120,28 +197,49 @@ def extract_lateral_posture_metrics(row: dict | pd.Series, visibility_threshold:
     if shoulder is not None and hip is not None:
         torso_length = _distance(shoulder, hip)
 
-    lateral_chain_ready = nose is not None and shoulder is not None and elbow is not None and hip is not None
+    lateral_torso_valid = _valid_lateral_torso(
+        row,
+        side,
+        shoulder,
+        hip,
+        torso_length,
+        visibility_threshold,
+    )
+
+    lateral_chain_ready = nose is not None and shoulder is not None and hip is not None and lateral_torso_valid
 
     head_forward_offset_ratio = None
     neck_forward_tilt_deg = None
-    if nose is not None and shoulder is not None and torso_length and torso_length > 0:
-        head_forward_offset_ratio = abs(nose[0] - shoulder[0]) / torso_length
+    if nose is not None and shoulder is not None:
         neck_forward_tilt_deg = _line_tilt_from_vertical(shoulder, nose)
+        if torso_length and torso_length > 0 and lateral_torso_valid:
+            head_forward_offset_ratio = abs(nose[0] - shoulder[0]) / torso_length
 
     trunk_forward_tilt_deg = None
     shoulder_hip_offset_ratio = None
-    if shoulder is not None and hip is not None and torso_length and torso_length > 0:
+    if shoulder is not None and hip is not None and torso_length and torso_length > 0 and lateral_torso_valid:
         trunk_forward_tilt_deg = _line_tilt_from_vertical(hip, shoulder)
         shoulder_hip_offset_ratio = abs(shoulder[0] - hip[0]) / torso_length
 
+    lateral_elbow_chain_valid = _valid_lateral_elbow_chain(
+        row,
+        side,
+        shoulder,
+        elbow,
+        wrist,
+        torso_length,
+        visibility_threshold,
+    )
     lateral_elbow_angle_deg = None
-    if shoulder is not None and elbow is not None and wrist is not None:
+    if shoulder is not None and elbow is not None and wrist is not None and lateral_elbow_chain_valid:
         lateral_elbow_angle_deg = _joint_angle(shoulder, elbow, wrist)
 
     return {
         "lateral_side": side,
         "lateral_chain_ready": lateral_chain_ready,
         "lateral_torso_length": torso_length,
+        "lateral_torso_valid": lateral_torso_valid,
+        "lateral_elbow_chain_valid": lateral_elbow_chain_valid,
         "head_forward_offset_ratio": head_forward_offset_ratio,
         "neck_forward_tilt_deg": neck_forward_tilt_deg,
         "trunk_forward_tilt_deg": trunk_forward_tilt_deg,
@@ -170,6 +268,8 @@ def evaluate_lateral_posture_metrics(metrics: dict) -> dict:
         [head_offset_status, neck_status],
         key=lambda item: SEVERITY_ORDER[item],
     )
+    # Cabeza adelantada/cuello en lateral se interpreta como aviso preventivo, no como riesgo por sí solo.
+    head_neck_status = _cap_severity(head_neck_status, "improvable")
 
     trunk_tilt_status = _severity_from_max(
         metrics.get("trunk_forward_tilt_deg"),
@@ -186,12 +286,15 @@ def evaluate_lateral_posture_metrics(metrics: dict) -> dict:
         key=lambda item: SEVERITY_ORDER[item],
     )
 
-    lateral_elbow_status = _severity_from_target_deviation(
+    raw_lateral_elbow_status = _severity_from_target_deviation(
         metrics.get("lateral_elbow_angle_deg"),
         target=95.0,
         adequate_delta=20.0,
         improvable_delta=40.0,
     )
+    # En perfil, muñeca/codo se contaminan fácilmente con mesa, silla o teclado. El codo queda como señal auxiliar:
+    # puede explicar una captura, pero no debe elevar por sí solo el diagnóstico global a riesgo.
+    lateral_elbow_status = _cap_severity(raw_lateral_elbow_status, "improvable")
 
     statuses = {
         "head_offset_status": head_offset_status,
@@ -206,7 +309,7 @@ def evaluate_lateral_posture_metrics(metrics: dict) -> dict:
     available_statuses = [
         status
         for key, status in statuses.items()
-        if key in {"trunk_status", "lateral_elbow_status"} and status != "insufficient_data"
+        if key in {"head_neck_status", "trunk_status"} and status != "insufficient_data"
     ]
     if not available_statuses:
         overall_status = "insufficient_data"
@@ -218,8 +321,12 @@ def evaluate_lateral_posture_metrics(metrics: dict) -> dict:
         feedback.append("Acerca la cabeza al eje del tronco y evita adelantar el cuello.")
     if trunk_status in {"improvable", "risk"}:
         feedback.append("Endereza el tronco para reducir la flexion mantenida.")
-    if lateral_elbow_status in {"improvable", "risk"}:
-        feedback.append("Ajusta la distancia al escritorio para acercar el codo a una posicion comoda.")
+    if lateral_elbow_status == "improvable":
+        feedback.append("El angulo del codo se usa como senal auxiliar porque puede verse afectado por oclusiones de mesa o silla.")
+    if not metrics.get("lateral_torso_valid"):
+        feedback.append("La cadera lateral no supera el filtro geometrico de calidad; puede haber oclusion por silla o mesa.")
+    if not metrics.get("lateral_elbow_chain_valid") and metrics.get("lateral_elbow_angle_deg") is None:
+        feedback.append("El brazo lateral queda fuera del diagnostico porque codo o muñeca no son fiables.")
 
     return {
         **statuses,

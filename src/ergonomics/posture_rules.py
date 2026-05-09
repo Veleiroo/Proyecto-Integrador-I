@@ -124,7 +124,7 @@ def _severity_from_target_deviation(
 def extract_posture_metrics(row: dict | pd.Series, visibility_threshold: float = 0.35) -> dict:
     """
     EXTRACTOR DE MÉTRICAS:
-    Traduce los puntos de la IA en medidas físicas (grados y proporciones)
+    Traduce los landmarks del modelo en medidas físicas (grados y proporciones).
     """
     # 1. Obtención de puntos anatómicos visibles
     nose = _point(row, "nose", threshold=visibility_threshold)
@@ -236,19 +236,10 @@ def evaluate_posture_metrics(metrics: dict) -> dict:
         key=lambda item: SEVERITY_ORDER[item],
     )
     
-    # Evaluación de codos
-    left_elbow_status = _severity_from_target_deviation(
-        metrics.get("left_elbow_angle_deg"),
-        target=95.0,
-        adequate_delta=15.0,
-        improvable_delta=30.0,
-    )
-    right_elbow_status = _severity_from_target_deviation(
-        metrics.get("right_elbow_angle_deg"),
-        target=95.0,
-        adequate_delta=15.0,
-        improvable_delta=30.0,
-    )
+    # En webcam frontal los antebrazos casi nunca entran completos en plano. Conservamos los ángulos como métrica
+    # de depuración, pero no se usan para clasificar ni para generar feedback en el MVP frontal.
+    left_elbow_status = "insufficient_data"
+    right_elbow_status = "insufficient_data"
 
     statuses = {
         "shoulder_tilt_status": shoulder_tilt_status,
@@ -263,8 +254,13 @@ def evaluate_posture_metrics(metrics: dict) -> dict:
     }
 
     # CÁLCULO DEL ESTADO GLOBAL
-    # Se basa en el indicador con mayor nivel de riesgo detectado
-    available_statuses = [status for status in statuses.values() if status != "insufficient_data"]
+    # Se basa en cabeza/cuello, hombros y tronco. Los codos quedan fuera por baja fiabilidad en webcam frontal.
+    diagnostic_keys = {"shoulder_status", "trunk_status", "head_status"}
+    available_statuses = [
+        status
+        for key, status in statuses.items()
+        if key in diagnostic_keys and status != "insufficient_data"
+    ]
     if len(available_statuses) < 2:
         overall_status = "insufficient_data"
     else:
@@ -282,10 +278,6 @@ def evaluate_posture_metrics(metrics: dict) -> dict:
         feedback.append("Intenta mantener los hombros mas nivelados y relajados.")
     if trunk_status in {"improvable", "risk"}:
         feedback.append("Recentra el tronco para evitar inclinaciones mantenidas.")
-    if left_elbow_status in {"improvable", "risk"}:
-        feedback.append("Ajusta el brazo izquierdo para acercar el codo a una posicion comoda.")
-    if right_elbow_status in {"improvable", "risk"}:
-        feedback.append("Ajusta el brazo derecho para acercar el codo a una posicion comoda.")
 
     return {
         **statuses,

@@ -46,21 +46,19 @@ test.describe('PostureOS Visual Validation', () => {
     const themeButton = page.locator('.theme-button');
     await expect(themeButton).toBeVisible();
     
-    // Verificar colores en light mode (muestreo)
     const loginShell = page.locator('.login-shell');
     const bgColor = await loginShell.evaluate(el => 
       window.getComputedStyle(el).backgroundColor
     );
-    console.log('Light mode - login-shell background:', bgColor);
+    expect(bgColor).toBeTruthy();
   });
 
   test('dark mode: toggle and verify colors', async ({ page }) => {
     await page.goto(BASE_URL);
     
-    // Verificar que está en light mode inicialmente
     const htmlElement = page.locator('html');
     const initialTheme = await htmlElement.getAttribute('data-theme');
-    console.log('Initial theme:', initialTheme);
+    expect(initialTheme).toBe('light');
     
     // Buscar y clickear el botón de tema
     const themeButton = page.locator('.theme-button').first();
@@ -69,20 +67,17 @@ test.describe('PostureOS Visual Validation', () => {
     // Esperar a que cambie el tema
     await page.waitForTimeout(300);
     
-    // Verificar que el tema cambió
     const newTheme = await htmlElement.getAttribute('data-theme');
-    console.log('New theme:', newTheme);
     expect(newTheme).toBe('dark');
     
     // Verificar que los elementos son visibles en dark mode
     await expect(page.locator('.login-shell')).toBeVisible();
     
-    // Verificar colores en dark mode
     const body = page.locator('body');
     const textColor = await body.evaluate(el => 
       window.getComputedStyle(el).color
     );
-    console.log('Dark mode - body text color:', textColor);
+    expect(textColor).toBeTruthy();
   });
 
   test('responsive: layout adapts at breakpoints', async ({ page }) => {
@@ -94,7 +89,7 @@ test.describe('PostureOS Visual Validation', () => {
     
     const sidebar = page.locator('.sidebar');
     const isVisible980 = await sidebar.isVisible();
-    console.log('Sidebar visible at 980px:', isVisible980);
+    expect(typeof isVisible980).toBe('boolean');
     
     // Test 680px breakpoint (mobile)
     await page.setViewportSize({ width: 680, height: 1024 });
@@ -104,7 +99,7 @@ test.describe('PostureOS Visual Validation', () => {
     const gridCols = await loginPanel.evaluate(el => 
       window.getComputedStyle(el).gridTemplateColumns
     );
-    console.log('Login panel grid columns at 680px:', gridCols);
+    expect(gridCols).toBeTruthy();
   });
 
   test('components: inputs have correct styling', async ({ page }) => {
@@ -117,7 +112,6 @@ test.describe('PostureOS Visual Validation', () => {
     const borderStyle = await inputWrap.evaluate(el => 
       window.getComputedStyle(el).borderWidth
     );
-    console.log('Input wrap border width:', borderStyle);
     
     // Verificar que el borde existe y no depende del estilo por defecto del navegador
     const borderWidth = parseFloat(borderStyle);
@@ -127,7 +121,7 @@ test.describe('PostureOS Visual Validation', () => {
     const borderRadius = await inputWrap.evaluate(el => 
       window.getComputedStyle(el).borderRadius
     );
-    console.log('Input wrap border radius:', borderRadius);
+    expect(parseFloat(borderRadius)).toBeGreaterThanOrEqual(6);
   });
 
   test('components: buttons have hover effects', async ({ page }) => {
@@ -139,7 +133,6 @@ test.describe('PostureOS Visual Validation', () => {
     const defaultShadow = await primaryButton.evaluate(el => 
       window.getComputedStyle(el).boxShadow
     );
-    console.log('Primary button default shadow:', defaultShadow);
     
     // Hover y verificar que cambia
     await primaryButton.hover();
@@ -148,7 +141,6 @@ test.describe('PostureOS Visual Validation', () => {
     const hoverShadow = await primaryButton.evaluate(el => 
       window.getComputedStyle(el).boxShadow
     );
-    console.log('Primary button hover shadow:', hoverShadow);
     
     // Las sombras deberían ser diferentes
     expect(hoverShadow).not.toBe(defaultShadow);
@@ -181,7 +173,6 @@ test.describe('PostureOS Visual Validation', () => {
     const bgColor = await body.evaluate(el => 
       window.getComputedStyle(el).backgroundColor
     );
-    console.log('Dark mode body background:', bgColor);
     expect(bgColor).not.toContain('248');  // No debe ser light gray (f8)
   });
 
@@ -226,10 +217,48 @@ test.describe('PostureOS Visual Validation', () => {
     await page.goto(BASE_URL);
 
     await expect(page.getByRole('button', { name: /Revisión/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Debug visual/ })).toHaveCount(0);
     await expect(page.locator('.connection-card')).toHaveCount(0);
     await page.getByRole('button', { name: /Información/ }).click();
     await expect(page.getByText('Qué significan los datos')).toBeVisible();
     await expect(page.getByText('API local')).toHaveCount(0);
+  });
+
+  test('dev role: shows visual debug tools', async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.endsWith('/api/auth/me')) {
+        await route.fulfill({ json: { id: 1, username: 'admin', display_name: 'Administrador', role: 'dev', created_at: new Date().toISOString() } });
+        return;
+      }
+      if (url.endsWith('/api/health')) {
+        await route.fulfill({ json: { ok: true } });
+        return;
+      }
+      if (url.includes('/api/analyses')) {
+        await route.fulfill({ json: { items: [] } });
+        return;
+      }
+      if (url.includes('/api/summary')) {
+        await route.fulfill({ json: { total: 0, by_status: {}, latest_at: null, periods: { last_7_days: { total: 0, adequate_ratio: 0, risk_count: 0, improvable_count: 0 } }, timeline: [], recommendations: [] } });
+        return;
+      }
+      await route.fulfill({ status: 404, json: {} });
+    });
+    await page.addInitScript(() => {
+      localStorage.setItem('authSession', JSON.stringify({
+        user: { id: 1, username: 'admin', display_name: 'Administrador', role: 'dev', created_at: new Date().toISOString() },
+        access_token: 'test-token',
+        token_type: 'bearer',
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      }));
+    });
+
+    await page.goto(BASE_URL);
+    await page.getByRole('button', { name: /Debug visual/ }).click();
+    await expect(page.getByText('Probar imagen sin cámara')).toBeVisible();
+    await expect(page.getByText('Keypoints y reglas')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Ejecutar depuración/ })).toBeDisabled();
   });
 
   test('camera panel: lateral mode enables dual-view capture', async ({ page }) => {
@@ -271,6 +300,96 @@ test.describe('PostureOS Visual Validation', () => {
     await expect(page.getByLabel('Cámara lateral')).toBeVisible();
     await expect(page.getByRole('button', { name: /Capturar doble vista/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Seguimiento doble/ })).toBeVisible();
+  });
+
+  test('camera panel: dual capture posts one combined analysis', async ({ page }) => {
+    const createdAt = new Date().toISOString();
+    const requests: string[] = [];
+
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: {
+          enumerateDevices: async () => [
+            { deviceId: 'front-cam', kind: 'videoinput', label: 'Front camera', groupId: 'front' },
+            { deviceId: 'side-cam', kind: 'videoinput', label: 'Side camera', groupId: 'side' },
+          ],
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          getUserMedia: async () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1280;
+            canvas.height = 720;
+            return canvas.captureStream(1);
+          },
+        },
+      });
+      HTMLMediaElement.prototype.play = async () => undefined;
+      Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, get: () => 1280 });
+      Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, get: () => 720 });
+      HTMLCanvasElement.prototype.getContext = () => ({ drawImage: () => undefined } as unknown as CanvasRenderingContext2D);
+      HTMLCanvasElement.prototype.toBlob = function toBlob(callback: BlobCallback) {
+        callback(new Blob(['fake-image'], { type: 'image/jpeg' }));
+      };
+      localStorage.setItem('authSession', JSON.stringify({
+        user: { id: 1, username: 'Pablo', display_name: 'Pablo', role: 'user', created_at: new Date().toISOString() },
+        access_token: 'test-token',
+        token_type: 'bearer',
+        expires_at: new Date(Date.now() + 86400000).toISOString(),
+      }));
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      requests.push(url);
+      if (url.endsWith('/api/auth/me')) {
+        await route.fulfill({ json: { id: 1, username: 'Pablo', display_name: 'Pablo', role: 'user', created_at: createdAt } });
+        return;
+      }
+      if (url.endsWith('/api/health')) {
+        await route.fulfill({ json: { ok: true } });
+        return;
+      }
+      if (url.includes('/api/analyses')) {
+        await route.fulfill({ json: { items: [] } });
+        return;
+      }
+      if (url.includes('/api/summary')) {
+        await route.fulfill({ json: { total: 0, by_status: {}, latest_at: null, periods: { last_7_days: { total: 0, adequate_ratio: 0, risk_count: 0, improvable_count: 0 } }, timeline: [], recommendations: [] } });
+        return;
+      }
+      if (url.endsWith('/api/analyze/combined')) {
+        await route.fulfill({
+          json: {
+            id: 101,
+            created_at: createdAt,
+            view: 'combined',
+            model: 'MediaPipe Pose + YOLO Pose',
+            backend: 'combined',
+            pose_detected: true,
+            visible_landmarks_count: 31,
+            status: 'improvable',
+            status_label: 'Mejorable',
+            feedback: 'Frontal: estable. Lateral: revisa el tronco.',
+            metrics: { shoulder_tilt_deg: 4.2, trunk_forward_tilt_deg: 8.1 },
+            components: { front_shoulder_status: 'adequate', lateral_trunk_status: 'improvable' },
+          },
+        });
+        return;
+      }
+      await route.fulfill({ status: 500, json: { detail: `Unexpected endpoint ${url}` } });
+    });
+
+    await page.goto(BASE_URL);
+    await page.getByRole('button', { name: /Lateral Opcional/ }).click();
+    await page.getByRole('button', { name: /Capturar doble vista/ }).click();
+
+    await expect(page.getByText('Combinada actualizada: Mejorable')).toBeVisible();
+    const lastResult = page.locator('.last-result-card');
+    await expect(lastResult.getByText('Última evaluación')).toBeVisible();
+    await expect(lastResult.getByText('Evaluación combinada')).toBeVisible();
+    expect(requests.some((url) => url.endsWith('/api/analyze/combined'))).toBe(true);
+    expect(requests.some((url) => url.endsWith('/api/analyze/lateral'))).toBe(false);
   });
 
   test('backend metric keys are presented with Spanish labels', async ({ page }) => {
@@ -368,7 +487,6 @@ test.describe('PostureOS Visual Validation', () => {
     await page.waitForTimeout(500);
     
     // No debería haber errores de CSS
-    console.log('CSS errors found:', errors.length);
     expect(errors).toHaveLength(0);
   });
 });

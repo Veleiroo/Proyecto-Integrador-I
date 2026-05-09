@@ -1,6 +1,11 @@
-# this file should not be used, requirements.txt should be used instead
+# Dependencias mínimas para ejecutar la API local.
 
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
 cryptography>=42.0.0
+pydantic>=2.0.0
+pandas>=2.2.0
+opencv-python>=4.10.0.84
+mediapipe>=0.10.35
+ultralytics>=8.4.46

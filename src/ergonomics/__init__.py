@@ -23,7 +23,7 @@ from .audit import (
     select_audit_examples,
 )
 
-# --- Módulo de Benchmark: Comparativa y selección de modelos de IA ---
+# --- Módulo de Benchmark: comparativa y selección de modelos de pose ---
 from .benchmark import (
     BenchmarkArtifacts,
     ModelDecision,
@@ -45,7 +45,7 @@ from .datasets import (
     summarize_dataset_groups,
 )
 
-# --- Módulo de Ejecución Larga (Long Run): Procesamiento por lotes incremental ---
+# --- Módulo de ejecución larga: procesamiento por lotes incremental ---
 from .long_run import LongRunArtifacts, run_incremental_long_pipeline
 from .long_run import rebuild_lateral_analysis_from_pose_artifacts, run_incremental_lateral_yolo_pipeline
 
@@ -77,7 +77,7 @@ from .pose_inference import (
     run_mediapipe_pose_batch,
 )
 
-# --- Módulo de Reglas Posturales: El cerebro ergonómico (Trigonometría y normas ROSA) ---
+# --- Módulo de reglas posturales: trigonometría y normas ROSA ---
 from .posture_rules import (
     analyze_pose_dataframe,
     analyze_pose_row,

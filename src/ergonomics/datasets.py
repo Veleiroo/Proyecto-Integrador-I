@@ -176,7 +176,7 @@ def load_coco_group_lookup(dataset_root: Path) -> dict[str, str]:
 
 # --- INFERENCIA AUTOMÁTICA DE METADATOS ---
 # Estas funciones evitan tener que escribir archivos de etiquetas a mano; 
-# el programa "aprende" la etiqueta mirando la estructura de carpetas.
+# infieren la etiqueta mirando la estructura de carpetas.
 
 def infer_group(image_path: Path, source_root: Path, coco_group_lookup: dict[str, str] | None = None) -> str:
     """
@@ -253,7 +253,7 @@ def collect_image_records_df(dataset_key: str):
 
 def summarize_available_datasets():
     """
-    Crea un panel de control (Dashboard) de todos los datasets registrados.
+    Crea un resumen de todos los datasets registrados.
     Permite saber de un vistazo cuántas imágenes tenemos disponibles en total.
     """
     import pandas as pd

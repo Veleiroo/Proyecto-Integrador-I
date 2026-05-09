@@ -36,8 +36,7 @@ def progress(iterable, **kwargs):
 @dataclass(frozen=True)
 class LongRunArtifacts:
     """
-    Estructura de datos que rastrea todas las rutas de salida de una 'Gran Ejecución'.
-    Centraliza dónde se guardan los landmarks, el análisis y los informes finales.
+    Rutas generadas por una ejecución incremental del pipeline.
     """
     output_dir: Path
     manifest_path: Path
@@ -92,7 +91,7 @@ def run_incremental_long_pipeline(
     records_df: pd.DataFrame,
     *,
     run_label: str,                     # Nombre de la carpeta de resultados (ej: "test_inicial")
-    pose_config: MediaPipePoseConfig,    # Configuración de la IA
+    pose_config: MediaPipePoseConfig,    # Configuración del detector de pose
     visibility_threshold: float = 0.35, # Confianza mínima para los puntos clave
     checkpoint_every: int = 100,        # Guardar en disco cada 100 imágenes
     resume: bool = True,                # Si es True, no repite lo que ya está hecho
@@ -141,7 +140,7 @@ def run_incremental_long_pipeline(
             total=len(pending_df),
             desc="Long run ergonomico",
         ):
-            # A. Inferencia: La IA busca el esqueleto
+            # A. Inferencia de landmarks corporales
             pose_row = estimator.infer_image(
                 item["image_path"],
                 metadata={"group": item.get("group"), "split": item.get("split")},

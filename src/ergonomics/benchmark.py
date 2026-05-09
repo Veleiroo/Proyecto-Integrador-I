@@ -78,7 +78,7 @@ def load_benchmark_artifacts(results_dir: Path = POSE_BENCHMARK_RESULTS_DIR) -> 
 
 def rank_models(summary_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Algoritmo de puntuación para jerarquizar los modelos de IA analizados.
+    Algoritmo de puntuación para jerarquizar los modelos de pose analizados.
     
     No solo mira la precisión, sino que equilibra tres factores:
     1. Cobertura del tren superior (Vital para el caso de uso frontal).
@@ -99,7 +99,7 @@ def rank_models(summary_df: pd.DataFrame) -> pd.DataFrame:
         ranked["runtime_efficiency_pct"] = 100.0 * (runtime.max() - runtime) / (runtime.max() - runtime.min())
 
     # --- FÓRMULA DE AJUSTE A LA FASE (PHASE FIT SCORE) ---
-    # Asignamos pesos según la importancia para el cliente :
+    # Pesos definidos para el alcance frontal de tren superior:
     # - 55%: Capacidad de ver el tren superior (Hombros, cuello, cabeza).
     # - 30%: Estabilidad de los puntos clave obligatorios.
     # - 15%: Velocidad (para cumplir con la 'No Interferencia' en el PC del usuario).
@@ -118,9 +118,7 @@ def rank_models(summary_df: pd.DataFrame) -> pd.DataFrame:
 
 def choose_reference_models(summary_df: pd.DataFrame) -> ModelDecision:
     """
-    Actúa como el 'Director Técnico' del proyecto. 
-    Basándose en el ranking calculado, selecciona formalmente el modelo principal 
-    y el de reserva, redactando una justificación técnica automática.
+    Selecciona el modelo principal y el de respaldo a partir del ranking calculado.
     """
     # Obtenemos el ranking basado en los pesos definidos (Precisión vs Velocidad)
     ranked = rank_models(summary_df)
@@ -130,8 +128,6 @@ def choose_reference_models(summary_df: pd.DataFrame) -> ModelDecision:
     # Si hay más de un modelo, el segundo queda como respaldo (Backup)
     backup = ranked.iloc[1]["model"] if len(ranked) > 1 else None
 
-    # Redacción del Rationale: Esto es clave para la transparencia con DATAlife.
-    # Explica el "porqué" de la decisión usando datos reales de éxito.
     rationale = (
         f"Se prioriza {primary['model']} porque lidera la fase actual en tren superior "
         f"({primary['upper_body_ready_pct']:.1f}% de imagenes listas) y en cobertura base "
@@ -149,7 +145,7 @@ def choose_reference_models(summary_df: pd.DataFrame) -> ModelDecision:
 def plot_model_overview(summary_df: pd.DataFrame):
     """
     Genera una comparativa visual de 'Los Tres Pilares': 
-    Latencia (Velocidad), Cobertura (IA) y Estabilidad (ROSA).
+    latencia, cobertura de keypoints y estabilidad de puntos requeridos.
     """
     if summary_df.empty:
         raise ValueError("El resumen del benchmark esta vacio.")

@@ -74,7 +74,7 @@ def load_run_audit_tables(
 
 def merge_pose_analysis(pose_df: pd.DataFrame, analysis_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Realiza un 'join' inteligente entre los datos de la IA (pose) y la 
+    Une los datos de detección de pose y la
     lógica de negocio (análisis), evitando duplicar columnas de metadatos.
     """
     if pose_df.empty or analysis_df.empty:

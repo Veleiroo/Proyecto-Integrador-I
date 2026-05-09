@@ -34,7 +34,7 @@ import "./styles.css";
 
 type ViewMode = "front" | "lateral" | "combined";
 type Status = "adequate" | "improvable" | "risk" | "insufficient_data";
-type Section = "camera" | "stats" | "history" | "privacy";
+type Section = "camera" | "stats" | "history" | "privacy" | "debug";
 type Theme = "light" | "dark";
 
 type ApiResult = {
@@ -80,6 +80,24 @@ type AuthSession = {
   expires_at: string;
 };
 
+type DevDebugResponse = {
+  ok: boolean;
+  result?: ApiResult;
+  debug?: {
+    saved_dir: string;
+    original_path: string;
+    annotated_path: string;
+    original_image_data_url: string;
+    annotated_image_data_url: string;
+    keypoints: Array<{ name: string; x: number; y: number; visibility: number | null }>;
+    rule_lines: Array<{ label: string; from: string; to: string; status: string; points: Array<[number, number]> }>;
+  };
+  error?: {
+    type: string;
+    message: string;
+  };
+};
+
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 const sectionCopy: Record<Section, { eyebrow: string; title: string }> = {
@@ -98,6 +116,10 @@ const sectionCopy: Record<Section, { eyebrow: string; title: string }> = {
   privacy: {
     eyebrow: "Local first",
     title: "Privacidad y datos del equipo",
+  },
+  debug: {
+    eyebrow: "Perfil técnico",
+    title: "Depuración visual del pipeline",
   },
 };
 
@@ -416,6 +438,7 @@ function App() {
           <NavButton active={activeSection === "stats"} icon={<BarChart3 />} label="Estadísticas" onClick={() => setActiveSection("stats")} />
           <NavButton active={activeSection === "history"} icon={<BarChart3 />} label="Historial local" onClick={() => setActiveSection("history")} />
           <NavButton active={activeSection === "privacy"} icon={<ShieldCheck />} label="Información" onClick={() => setActiveSection("privacy")} />
+          {isDev && <NavButton active={activeSection === "debug"} icon={<FileImage />} label="Debug visual" onClick={() => setActiveSection("debug")} />}
         </nav>
 
         {isDev && (
@@ -468,6 +491,7 @@ function App() {
         {activeSection === "history" && <HistoryPanel history={history} onSelect={setSelectedRecord} />}
         {activeSection === "stats" && <StatsPanel stats={stats} history={history} onSelect={setSelectedRecord} />}
         {activeSection === "privacy" && <PrivacyPanel apiBase={apiBase} setApiBase={setApiBase} isDev={isDev} />}
+        {activeSection === "debug" && isDev && <DevDebugPanel apiBase={apiBase} authHeaders={authHeaders} />}
       </section>
       {selectedRecord && <AnalysisDetail record={selectedRecord} onClose={() => setSelectedRecord(null)} />}
     </main>
@@ -530,7 +554,7 @@ function LoginScreen({
             </div>
             <div>
               <strong>PostureOS</strong>
-              <span>Local posture intelligence</span>
+              <span>Ergonomía local privada</span>
             </div>
           </div>
           <h1>Ergonomía privada en tu propio equipo</h1>
@@ -630,6 +654,7 @@ function CameraPanel({
   const [activeView, setActiveView] = useState<Extract<ViewMode, "front" | "lateral">>("front");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
   const [cadence, setCadence] = useState("Cada 1 min");
   const [lastCapture, setLastCapture] = useState<ApiResult | null>(null);
   const [captureStatus, setCaptureStatus] = useState<string>("Sin capturas en esta sesión");
@@ -676,12 +701,8 @@ function CameraPanel({
     if (!navigator.mediaDevices?.enumerateDevices) return;
     const nextDevices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput");
     setDevices(nextDevices);
-    if (!frontDeviceId && nextDevices[0]?.deviceId) {
-      setFrontDeviceId(nextDevices[0].deviceId);
-    }
-    if (!lateralDeviceId && nextDevices[1]?.deviceId) {
-      setLateralDeviceId(nextDevices[1].deviceId);
-    }
+    setFrontDeviceId((current) => current || nextDevices[0]?.deviceId || "");
+    setLateralDeviceId((current) => current || nextDevices[1]?.deviceId || "");
   }
 
   function videoFor(view: Extract<ViewMode, "front" | "lateral">) {
@@ -804,38 +825,56 @@ function CameraPanel({
   }
 
   async function captureAndAnalyze(view: Extract<ViewMode, "front" | "lateral"> = "front") {
-    if (view === "lateral") {
-      await captureDualAndAnalyze();
-      return;
+    if (isCapturing) return false;
+    setIsCapturing(true);
+    setCameraError(null);
+    try {
+      if (view === "lateral") {
+        return await captureDualAndAnalyze();
+      }
+      setCaptureStatus(`Capturando ${viewCopy[view].label.toLowerCase()}...`);
+      const blob = await captureFrameBlob(view);
+      if (!blob) {
+        setCaptureStatus("No se pudo capturar una imagen válida.");
+        return false;
+      }
+      setCaptureStatus(`Analizando ${viewCopy[view].label.toLowerCase()}...`);
+      const analysis = await postAnalysis(view, blob);
+      setLastCapture(analysis);
+      setCaptureStatus(`Última captura: ${analysis.status_label}`);
+      onAnalysis(analysis);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo analizar la captura.";
+      setCaptureStatus(message);
+      setCameraError(message);
+      return false;
+    } finally {
+      setIsCapturing(false);
     }
-    setCaptureStatus(`Capturando ${viewCopy[view].label.toLowerCase()}...`);
-    const blob = await captureFrameBlob(view);
-    if (!blob) return;
-    setCaptureStatus(`Analizando ${viewCopy[view].label.toLowerCase()}...`);
-    const analysis = await postAnalysis(view, blob);
-    setLastCapture(analysis);
-    setCaptureStatus(`Última captura: ${analysis.status_label}`);
-    onAnalysis(analysis);
   }
 
   async function captureDualAndAnalyze() {
     setCaptureStatus("Capturando frontal y lateral...");
     const [frontStarted, lateralStarted] = await Promise.all([startCamera("front"), startCamera("lateral")]);
-    if (!frontStarted || !lateralStarted) return;
+    if (!frontStarted || !lateralStarted) {
+      setCaptureStatus("No se pudieron activar las dos cámaras para la evaluación combinada.");
+      return false;
+    }
     await new Promise((resolve) => window.setTimeout(resolve, 900));
     const [frontBlob, lateralBlob] = await Promise.all([snapshotVideo(frontVideoRef.current), snapshotVideo(lateralVideoRef.current)]);
     stopAllCameras();
-    if (!frontBlob || !lateralBlob) return;
+    if (!frontBlob || !lateralBlob) {
+      setCaptureStatus("No se pudieron capturar las dos vistas.");
+      return false;
+    }
 
-    setCaptureStatus("Analizando vista lateral...");
-    const lateral = await postAnalysis("lateral", lateralBlob);
-    onAnalysis(lateral);
-
-    setCaptureStatus("Generando evaluación combinada frontal + lateral...");
+    setCaptureStatus("Analizando frontal + lateral...");
     const combined = await postCombinedAnalysis(frontBlob, lateralBlob);
     setLastCapture(combined);
     setCaptureStatus(`Combinada actualizada: ${combined.status_label}`);
     onAnalysis(combined);
+    return true;
   }
 
   function cadenceMs() {
@@ -859,11 +898,12 @@ function CameraPanel({
   function scheduleNextCapture(view: Extract<ViewMode, "front" | "lateral">) {
     if (runTimerRef.current) window.clearTimeout(runTimerRef.current);
     runTimerRef.current = window.setTimeout(async () => {
-      if (!isRunningRef.current) return;  // Usar el ref en lugar del state
-      try {
-        await captureAndAnalyze(view);
-      } catch (error) {
-        setCaptureStatus(error instanceof Error ? error.message : "No se pudo analizar la captura.");
+      if (!isRunningRef.current) return;
+      const ok = await captureAndAnalyze(view);
+      if (!ok) {
+        isRunningRef.current = false;
+        setIsRunning(false);
+        return;
       }
       scheduleNextCapture(view);
     }, cadenceMs());
@@ -882,8 +922,13 @@ function CameraPanel({
     isRunningRef.current = true;
     setIsRunning(true);
     try {
-      await captureAndAnalyze(nextTrackingView);
-      scheduleNextCapture(nextTrackingView);
+      const ok = await captureAndAnalyze(nextTrackingView);
+      if (ok) {
+        scheduleNextCapture(nextTrackingView);
+      } else {
+        isRunningRef.current = false;
+        setIsRunning(false);
+      }
     } catch (error) {
       setCaptureStatus(error instanceof Error ? error.message : "No se pudo analizar la captura.");
       isRunningRef.current = false;
@@ -893,6 +938,7 @@ function CameraPanel({
 
   const frontReady = cameraStates.front === "ready";
   const lateralReady = cameraStates.lateral === "ready";
+  const cameraBusy = isCapturing || cameraStates.front === "loading" || cameraStates.lateral === "loading";
   const trackingLabel = activeView === "front" ? "Seguimiento frontal" : "Seguimiento doble";
   const runningLabel = trackingViewRef.current === "front" ? "Seguimiento frontal activo" : "Seguimiento doble activo";
   const cameraReady = activeView === "front" ? frontReady : frontReady && lateralReady;
@@ -983,11 +1029,11 @@ function CameraPanel({
               {cameraReady ? <VideoOff size={17} /> : <Video size={17} />}
               {cameraReady ? "Apagar cámaras" : "Solicitar permiso"}
             </button>
-            <button className="ghost-button" type="button" onClick={() => captureAndAnalyze(activeView)} disabled={cameraStates.front === "loading" || cameraStates.lateral === "loading"}>
-              <Activity size={17} />
+            <button className="ghost-button" type="button" onClick={() => captureAndAnalyze(activeView)} disabled={cameraBusy}>
+              {isCapturing ? <Loader2 className="spin" size={17} /> : <Activity size={17} />}
               {activeView === "front" ? "Capturar frontal" : "Capturar doble vista"}
             </button>
-            <button className="primary-button" type="button" onClick={toggleRun}>
+            <button className="primary-button" type="button" onClick={toggleRun} disabled={isCapturing && !isRunning}>
               {isRunning ? <Pause size={18} /> : <Play size={18} />}
               {isRunning ? "Pausar sesión" : trackingLabel}
             </button>
@@ -1049,7 +1095,6 @@ function CameraPanel({
               </select>
             </label>
           )}
-          <p className="panel-note">En modo lateral conviven dos fuentes: webcam para frontal y móvil o segunda cámara para perfil.</p>
         </section>
 
         <section className="data-card">
@@ -1078,11 +1123,26 @@ function CameraPanel({
         </section>
 
         {lastCapture && (
-          <section className={`status-card ${tone(lastCapture.status)}`}>
-            <div className="status-icon"><Activity /></div>
-            <div>
-              <span>Última captura</span>
-              <strong>{lastCapture.status_label}</strong>
+          <section className="data-card last-result-card">
+            <div className="section-title">
+              <h2>Última evaluación</h2>
+              <span>{viewCopy[lastCapture.view].label}</span>
+            </div>
+            <div className={`status-card ${tone(lastCapture.status)}`}>
+              <div className="status-icon"><Activity /></div>
+              <div>
+                <span>{lastCapture.model}</span>
+                <strong>{lastCapture.status_label}</strong>
+              </div>
+            </div>
+            <p className="panel-note">{lastCapture.feedback}</p>
+            <div className="mini-metric-list">
+              {Object.entries(lastCapture.metrics ?? {}).filter(([, value]) => value !== null).slice(0, 4).map(([key, value]) => (
+                <div className="data-row" key={key}>
+                  <span>{labelMetric(key)}</span>
+                  <strong>{formatMetric(value, key)}</strong>
+                </div>
+              ))}
             </div>
           </section>
         )}
@@ -1509,6 +1569,159 @@ function HistoryPanel({ history, onSelect }: { history: ReviewRecord[]; onSelect
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+function DevDebugPanel({ apiBase, authHeaders }: { apiBase: string; authHeaders: Record<string, string> }) {
+  const [debugView, setDebugView] = useState<Extract<ViewMode, "front" | "lateral">>("front");
+  const [file, setFile] = useState<File | null>(null);
+  const [response, setResponse] = useState<DevDebugResponse | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function submitDebug(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file || isSubmitting) return;
+    setIsSubmitting(true);
+    setResponse(null);
+    const payload = new FormData();
+    payload.append("view", debugView);
+    payload.append("file", file, file.name);
+    try {
+      const nextResponse = await fetch(`${apiBase}/api/dev/analyze-image`, {
+        method: "POST",
+        headers: authHeaders,
+        body: payload,
+      });
+      const body = await nextResponse.json().catch(() => null);
+      if (!nextResponse.ok) {
+        setResponse({
+          ok: false,
+          error: {
+            type: `HTTP ${nextResponse.status}`,
+            message: body?.detail ?? "No se pudo ejecutar la depuración.",
+          },
+        });
+        return;
+      }
+      setResponse(body as DevDebugResponse);
+    } catch (error) {
+      setResponse({
+        ok: false,
+        error: {
+          type: error instanceof Error ? error.name : "Error",
+          message: error instanceof Error ? error.message : "No se pudo conectar con el backend.",
+        },
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const metrics = response?.result ? Object.entries(response.result.metrics ?? {}).filter(([, value]) => value !== null) : [];
+
+  return (
+    <section className="debug-layout">
+      <form className="content-card debug-uploader" onSubmit={submitDebug}>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Entrada manual</p>
+            <h2>Probar imagen sin cámara</h2>
+          </div>
+          <span>{viewCopy[debugView].model}</span>
+        </div>
+        <div className="view-switch compact">
+          <button className={debugView === "front" ? "active" : ""} type="button" onClick={() => setDebugView("front")}>
+            <strong>Frontal</strong>
+            <span>MediaPipe</span>
+          </button>
+          <button className={debugView === "lateral" ? "active" : ""} type="button" onClick={() => setDebugView("lateral")}>
+            <strong>Lateral</strong>
+            <span>YOLO Pose</span>
+          </button>
+        </div>
+        <label className="debug-dropzone">
+          <input accept="image/*" type="file" onChange={(event) => {
+            setFile(event.target.files?.[0] ?? null);
+            setResponse(null);
+          }} />
+          <FileImage size={34} />
+          <strong>{file ? file.name : "Selecciona una imagen"}</strong>
+          <span>El perfil dev guarda original y overlay anotado para demo y revisión técnica.</span>
+        </label>
+        <button className="primary-button full" type="submit" disabled={!file || isSubmitting}>
+          {isSubmitting ? <Loader2 className="spin" size={18} /> : <Activity size={18} />}
+          Ejecutar depuración
+        </button>
+        {response?.debug && (
+          <div className="deployment-note">
+            <DatabaseZap size={19} />
+            <p>Guardado en <code>{response.debug.saved_dir}</code></p>
+          </div>
+        )}
+      </form>
+
+      <div className="content-card debug-output">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Salida visual</p>
+            <h2>Keypoints y reglas</h2>
+          </div>
+          {response?.debug && <span>{response.debug.keypoints.length} puntos</span>}
+        </div>
+        {!response && (
+          <div className="empty-result">
+            <FileImage size={38} />
+            <p>Sube una imagen para generar el overlay con puntos corporales y líneas de reglas.</p>
+          </div>
+        )}
+        {response?.error && (
+          <Message title={response.error.type} body={response.error.message} />
+        )}
+        {response?.debug && (
+          <>
+            <div className="debug-images">
+              <figure>
+                <img src={response.debug.original_image_data_url} alt="Captura original" />
+                <figcaption>Original guardada</figcaption>
+              </figure>
+              <figure>
+                <img src={response.debug.annotated_image_data_url} alt="Captura anotada con keypoints" />
+                <figcaption>Overlay de keypoints y reglas</figcaption>
+              </figure>
+            </div>
+            <div className="debug-grid">
+              <section className="data-card">
+                <div className="section-title">
+                  <h2>Líneas de regla</h2>
+                  <span>{response.debug.rule_lines.length}</span>
+                </div>
+                {response.debug.rule_lines.map((line, index) => (
+                  <div className="component-row" key={`${line.label}-${index}`}>
+                    <span>{line.label}</span>
+                    <strong className={tone(line.status)}>{labelStatus(line.status)}</strong>
+                  </div>
+                ))}
+              </section>
+              {response.result && (
+                <section className="data-card">
+                  <div className="section-title">
+                    <h2>Resultado</h2>
+                    <span>{response.result.status_label}</span>
+                  </div>
+                  <p className="panel-note">{response.result.feedback}</p>
+                  {metrics.slice(0, 6).map(([key, value]) => (
+                    <div className="data-row" key={key}>
+                      <span>{labelMetric(key)}</span>
+                      <strong>{formatMetric(value, key)}</strong>
+                    </div>
+                  ))}
+                </section>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </section>
   );
 }

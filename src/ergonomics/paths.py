@@ -6,7 +6,7 @@ from pathlib import Path
 
 def find_project_root(start: Path | None = None) -> Path:
     """
-    Busca de forma inteligente la carpeta raíz del proyecto.
+    Busca la carpeta raíz del proyecto subiendo por el árbol de directorios.
     
     Sube por el árbol de carpetas hasta encontrar el directorio que contiene '.git'.
     Esto garantiza que las rutas funcionen igual en el ordenador de cualquier 

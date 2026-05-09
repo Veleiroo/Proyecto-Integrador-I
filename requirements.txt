@@ -6,6 +6,8 @@ mediapipe>=0.10.35
 ultralytics>=8.4.46
 tensorflow>=2.21.0
 tensorflow-hub>=0.16.1
+pandas>=2.2.0
+matplotlib>=3.9.0
 tqdm>=4.67.3
 
 # Environment Management
@@ -19,3 +21,5 @@ cryptography>=42.0.0
 
 # Jupyter Notebook
 ipykernel>=6.0.0
+jupytext>=1.16.0
+nbclient>=0.10.0

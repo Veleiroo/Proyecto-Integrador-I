@@ -70,11 +70,10 @@ class MediaPipePoseConfig:
 
 class MediaPipePoseEstimator:
     """
-    Gestor del modelo de IA MediaPipe.
-    Esta clase controla el 'ciclo de vida' del detector de posturas. 
-    Garantiza que solo consuma memoria cuando se está usando y 
-    se apague automáticamente al terminar, evitando que el ordenador 
-    del trabajador se vuelva lento o se bloquee por falta de RAM.
+    Gestiona el ciclo de vida del detector de posturas de MediaPipe.
+
+    El modelo se carga solo cuando se entra en el contexto y se libera al salir,
+    lo que permite reutilizar el estimador en lotes sin mantener recursos abiertos.
     """
     def __init__(self, config: MediaPipePoseConfig | None = None):
         self.config = config or MediaPipePoseConfig()
@@ -97,7 +96,7 @@ class MediaPipePoseEstimator:
         options = vision.PoseLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=str(self.config.model_path)),
             running_mode=vision.RunningMode.IMAGE, # Optimizado para procesamiento foto a foto
-            num_poses=1,                           # Solo buscamos a un trabajador por imagen
+            num_poses=1,                           # El caso de uso analiza una persona por imagen
             min_pose_detection_confidence=self.config.min_pose_detection_confidence,
             min_pose_presence_confidence=self.config.min_pose_presence_confidence,
             min_tracking_confidence=self.config.min_tracking_confidence,
@@ -122,7 +121,6 @@ class MediaPipePoseEstimator:
         Carga una imagen, la pasa por el modelo y devuelve un diccionario con 
         las coordenadas (x, y, z) de cada parte del cuerpo detectada.
         """
-        # Validación de seguridad: no podemos ver si no hemos abierto los ojos
         if self._model is None or self._mp is None:
             raise RuntimeError("El estimador de MediaPipe no esta inicializado.")
 

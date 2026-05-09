@@ -20,14 +20,15 @@ models/mediapipe/
 # Notebook outputs
 notebooks/pose_benchmark/results/
 notebooks/ergonomics/results/
+informe_resultados_assets/
 
 # Web app local artifacts
 apps/web/node_modules/
 apps/web/dist/
+apps/web/test-results/
 
 # VSCode Specific
 .vscode/
 
 # Environments
-.env
 .venv/

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import os
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
 import sqlite3
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -252,6 +251,34 @@ async def analyze_combined(
     if app.state.config.require_auth and user is None:
         raise HTTPException(status_code=401, detail="Autenticación requerida.")
     return await _analyze_combined_uploads(front_file, lateral_file, user)
+
+
+@app.post("/api/dev/analyze-image")
+async def dev_analyze_image(
+    user: Annotated[dict, Depends(current_user)],
+    view: str = Form("front"),
+    file: UploadFile = File(...),
+) -> dict:
+    if user.get("role") != "dev":
+        raise HTTPException(status_code=403, detail="Solo el perfil técnico puede usar herramientas de depuración.")
+    image_path = await _save_upload(file)
+    try:
+        analyzer: PostureAnalyzer = app.state.analyzer
+        output_dir = app.state.config.database_path.parent / "dev_captures"
+        return analyzer.analyze_debug_image(image_path, view=view, output_dir=output_dir)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": {
+                "type": exc.__class__.__name__,
+                "message": str(exc),
+            },
+        }
+    finally:
+        try:
+            image_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 @app.post("/api/auth/register")

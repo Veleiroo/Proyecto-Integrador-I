@@ -27,7 +27,7 @@ def build_group_status_summary(analysis_df: pd.DataFrame) -> pd.DataFrame:
     """
     RESUMEN POR GRUPOS:
     Desglosa el estado ergonómico según el grupo.
-    Permite comparar qué grupos de trabajadores están en mayor riesgo.
+    Permite comparar qué grupos del dataset concentran más avisos de riesgo.
     """
     if analysis_df.empty:
         return pd.DataFrame(columns=["group", "overall_status", "image_count", "share_pct"])
