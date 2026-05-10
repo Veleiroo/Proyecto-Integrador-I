@@ -65,8 +65,7 @@ Path("yolo11s-pose.pt").replace(target)
 
 def _install_web_dependencies(*, build: bool) -> None:
     if shutil.which("npm") is None:
-        print("npm no esta disponible; se omite la instalacion del frontend.", file=sys.stderr)
-        return
+        raise RuntimeError("npm no esta disponible. Instala Node.js 20+ o ejecuta con --skip-web.")
     web_dir = PROJECT_ROOT / "apps" / "web"
     _run(["npm", "install"], cwd=web_dir)
     if build:

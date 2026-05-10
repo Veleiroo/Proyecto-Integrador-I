@@ -34,6 +34,17 @@ python scripts/bootstrap_local.py
 python scripts/start_local.py
 ```
 
+Lanzadores equivalentes:
+
+```text
+Windows: launchers/windows/PostureOS.bat
+Windows PowerShell: launchers/windows/PostureOS.ps1
+Linux: launchers/linux-macos/postureos.sh
+macOS: launchers/linux-macos/PostureOS.command
+```
+
+En el primer arranque preparan `.venv`, descargan modelos y construyen la web. Después arrancan la aplicación en `http://localhost:8000`.
+
 Modelos locales requeridos por la API:
 
 ```bash

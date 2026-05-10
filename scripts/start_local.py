@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import argparse
 import signal
 import subprocess
 import sys
 import time
+import webbrowser
 from pathlib import Path
 
 
@@ -20,6 +22,11 @@ def _start(command: list[str | Path], *, cwd: Path, env: dict[str, str] | None =
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Start PostureOS locally.")
+    parser.add_argument("--dev-web", action="store_true", help="Run the Vite dev server instead of serving the built web app.")
+    parser.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically.")
+    args = parser.parse_args()
+
     if not VENV_PYTHON.exists():
         print("No existe .venv. Ejecuta primero: python scripts/bootstrap_local.py", file=sys.stderr)
         return 1
@@ -30,8 +37,11 @@ def main() -> int:
         cwd=PROJECT_ROOT,
         env=backend_env,
     )
-    frontend = _start(["npm", "run", "dev"], cwd=PROJECT_ROOT / "apps" / "web")
-    processes = [backend, frontend]
+    processes = [backend]
+    frontend = None
+    if args.dev_web:
+        frontend = _start(["npm", "run", "dev"], cwd=PROJECT_ROOT / "apps" / "web")
+        processes.append(frontend)
 
     def stop(_signum: int | None = None, _frame: object | None = None) -> None:
         for process in processes:
@@ -42,7 +52,9 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop)
 
     print("Backend: http://localhost:8000")
-    print("Frontend: http://localhost:5173")
+    print("Frontend: http://localhost:5173" if args.dev_web else "App: http://localhost:8000")
+    if not args.no_browser:
+        webbrowser.open("http://localhost:5173" if args.dev_web else "http://localhost:8000")
 
     try:
         while True:

@@ -133,6 +133,17 @@ python scripts/bootstrap_local.py
 python scripts/start_local.py
 ```
 
+Lanzadores de escritorio:
+
+```text
+launchers/windows/PostureOS.bat
+launchers/windows/PostureOS.ps1
+launchers/linux-macos/postureos.sh
+launchers/linux-macos/PostureOS.command
+```
+
+Estos lanzadores ejecutan `scripts/launch_local.py`: si falta `.venv`, modelos o `apps/web/dist`, preparan el entorno y luego abren la aplicación en `http://localhost:8000`.
+
 Modelos locales:
 
 ```bash
@@ -181,9 +192,11 @@ Los usuarios iniciales solo se crean si no existen, por lo que un cambio manual 
 El proyecto puede distribuirse como una carpeta ejecutable con:
 
 - `scripts/bootstrap_local.py`: crea `.venv`, instala dependencias, descarga MediaPipe y YOLO11s, e instala/construye el frontend.
-- `scripts/start_local.py`: arranca backend y frontend local.
+- `scripts/start_local.py`: arranca el servidor local y sirve la web compilada desde FastAPI.
+- `scripts/launch_local.py`: lanzador idempotente; instala lo que falte y arranca la app.
+- `launchers/`: accesos directos por sistema operativo.
 
-Para un `.exe` nativo de Windows, la ruta recomendable es envolver estos scripts con un instalador ligero o empaquetar un launcher con PyInstaller. No conviene meter los pesos ni `node_modules` en Git; el bootstrap los descarga y regenera.
+Para un `.exe` nativo de Windows, la ruta recomendable es envolver `scripts/launch_local.py` con PyInstaller o un instalador ligero. No conviene meter los pesos ni `node_modules` en Git; el bootstrap los descarga y regenera.
 
 Para los notebooks completos:
 

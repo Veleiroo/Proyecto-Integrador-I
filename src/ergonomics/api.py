@@ -8,13 +8,14 @@ from typing import Annotated
 import sqlite3
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .app_config import AppConfig, load_app_config
 from .app_security import PasswordHasher, PayloadCipher, create_session_token
 from .app_service import PostureAnalyzer
 from .app_storage import AppStorage
-from .paths import MEDIAPIPE_TASK_MODEL_PATH
+from .paths import MEDIAPIPE_TASK_MODEL_PATH, PROJECT_ROOT
 
 
 class RegisterRequest(BaseModel):
@@ -337,3 +338,8 @@ def delete_analyses(user: Annotated[dict, Depends(current_user)]) -> dict:
 @app.get("/api/summary")
 def summary(user: Annotated[dict, Depends(current_user)]) -> dict:
     return _storage().analysis_summary(user_id=user["id"])
+
+
+WEB_DIST_DIR = PROJECT_ROOT / "apps" / "web" / "dist"
+if WEB_DIST_DIR.exists():
+    app.mount("/", StaticFiles(directory=WEB_DIST_DIR, html=True), name="web")
