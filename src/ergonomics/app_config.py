@@ -5,7 +5,7 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import PROJECT_ROOT
+from .paths import PROJECT_ROOT, YOLO_POSE_WEIGHTS_PATH
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -31,6 +31,7 @@ class AppConfig:
     secret_key: str
     require_auth: bool
     yolo_device: str
+    yolo_pose_weights_path: Path
     allowed_origins: list[str]
     seed_default_users: bool
     max_upload_bytes: int
@@ -59,6 +60,7 @@ def load_app_config() -> AppConfig:
         secret_key=secret_key,
         require_auth=_bool_env("ERGONOMICS_REQUIRE_AUTH", default=True),
         yolo_device=os.getenv("YOLO_DEVICE", "auto"),
+        yolo_pose_weights_path=Path(os.getenv("YOLO_POSE_WEIGHTS_PATH", YOLO_POSE_WEIGHTS_PATH)),
         allowed_origins=[origin.strip() for origin in raw_origins.split(",") if origin.strip()],
         seed_default_users=_bool_env("ERGONOMICS_SEED_DEFAULT_USERS", default=True),
         max_upload_bytes=_int_env("ERGONOMICS_MAX_UPLOAD_MB", 8) * 1024 * 1024,

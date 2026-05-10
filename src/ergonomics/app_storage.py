@@ -106,46 +106,23 @@ class AppStorage:
                 "created_at": now,
             }
 
-    def upsert_user(self, *, username: str, display_name: str, password_hash: str, role: str) -> dict[str, Any]:
-        now = _to_iso(_utc_now())
-        normalized_username = username.strip()
-        with self.connect() as connection:
-            existing = connection.execute(
-                "SELECT * FROM users WHERE email = ? COLLATE NOCASE",
-                (normalized_username,),
-            ).fetchone()
-            if existing is None:
-                cursor = connection.execute(
-                    """
-                    INSERT INTO users (email, display_name, password_hash, role, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (normalized_username, display_name.strip(), password_hash, role, now),
-                )
-                return {
-                    "id": cursor.lastrowid,
-                    "username": normalized_username,
-                    "email": normalized_username,
-                    "display_name": display_name.strip(),
-                    "role": role,
-                    "created_at": now,
-                }
-            connection.execute(
-                """
-                UPDATE users
-                SET display_name = ?, password_hash = ?, role = ?
-                WHERE id = ?
-                """,
-                (display_name.strip(), password_hash, role, existing["id"]),
-            )
+    def create_user_if_missing(self, *, username: str, display_name: str, password_hash: str, role: str) -> dict[str, Any]:
+        existing = self.get_user_by_username(username)
+        if existing is not None:
             return {
                 "id": existing["id"],
                 "username": existing["email"],
                 "email": existing["email"],
-                "display_name": display_name.strip(),
-                "role": role,
+                "display_name": existing["display_name"],
+                "role": existing["role"],
                 "created_at": existing["created_at"],
             }
+        return self.create_user(
+            username=username,
+            display_name=display_name,
+            password_hash=password_hash,
+            role=role,
+        )
 
     def get_user_by_username(self, username: str) -> sqlite3.Row | None:
         with self.connect() as connection:
@@ -196,7 +173,7 @@ class AppStorage:
     def delete_session(self, token: str) -> None:
         with self.connect() as connection:
             connection.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_session_token(token),))
-    
+
     def cleanup_expired_sessions(self) -> int:
         """Eliminar sesiones caducadas. Retorna número de filas eliminadas."""
         now = _to_iso(_utc_now())
@@ -263,14 +240,14 @@ class AppStorage:
         now = _utc_now()
         cutoff_7 = _to_iso(now - timedelta(days=7))
         cutoff_30 = _to_iso(now - timedelta(days=30))
-        
+
         with self.connect() as connection:
             # Conteos generales (sin desencriptar)
             total = connection.execute(
                 "SELECT COUNT(*) AS count FROM analyses WHERE user_id = ?",
                 (user_id,),
             ).fetchone()["count"]
-            
+
             by_status = connection.execute(
                 """
                 SELECT status, COUNT(*) AS count
@@ -281,7 +258,7 @@ class AppStorage:
                 """,
                 (user_id,),
             ).fetchall()
-            
+
             by_view = connection.execute(
                 """
                 SELECT view, COUNT(*) AS count
@@ -292,7 +269,7 @@ class AppStorage:
                 """,
                 (user_id,),
             ).fetchall()
-            
+
             latest = connection.execute(
                 """
                 SELECT created_at
@@ -303,20 +280,22 @@ class AppStorage:
                 """,
                 (user_id,),
             ).fetchone()
-            
-            # Filtrar por fechas con SQL (evita desencriptar)
-            rows_7_days = connection.execute(
-                """
-                SELECT id, view, status, status_label, model, pose_detected,
-                       visible_landmarks_count, encrypted_payload, created_at
-                FROM analyses
-                WHERE user_id = ? AND created_at >= ?
-                ORDER BY created_at DESC
-                LIMIT 100
-                """,
-                (user_id, cutoff_7),
-            ).fetchall()
-            
+
+            period_7_days = self._period_summary_from_sql(
+                connection,
+                user_id=user_id,
+                cutoff=cutoff_7,
+            )
+            period_30_days = self._period_summary_from_sql(
+                connection,
+                user_id=user_id,
+                cutoff=cutoff_30,
+            )
+            period_all_time = self._period_summary_from_sql(
+                connection,
+                user_id=user_id,
+            )
+
             rows_30_days = connection.execute(
                 """
                 SELECT id, view, status, status_label, model, pose_detected,
@@ -328,7 +307,7 @@ class AppStorage:
                 """,
                 (user_id, cutoff_30),
             ).fetchall()
-            
+
             # Todos (para recomendaciones, máx 100)
             all_rows = connection.execute(
                 """
@@ -341,7 +320,7 @@ class AppStorage:
                 """,
                 (user_id,),
             ).fetchall()
-        
+
         # Desencriptar solo lo necesario
         def decrypt_rows(rows):
             items = []
@@ -351,36 +330,55 @@ class AppStorage:
                 payload["created_at"] = row["created_at"]
                 items.append(payload)
             return items
-        
-        last_7_days = decrypt_rows(rows_7_days)
+
         last_30_days = decrypt_rows(rows_30_days)
         analyses = decrypt_rows(all_rows)
-        
+
         return {
             "total": total,
             "by_status": {row["status"]: row["count"] for row in by_status},
             "by_view": {row["view"]: row["count"] for row in by_view},
             "latest_at": latest["created_at"] if latest else None,
             "periods": {
-                "last_7_days": self._period_summary(last_7_days),
-                "last_30_days": self._period_summary(last_30_days),
-                "all_time": self._period_summary(analyses),
+                "last_7_days": period_7_days,
+                "last_30_days": period_30_days,
+                "all_time": period_all_time,
             },
             "timeline": self._build_weekly_timeline(last_30_days),
             "recommendations": self._build_recommendations(analyses),
         }
 
-    def _period_summary(self, items: list[dict[str, Any]]) -> dict[str, Any]:
-        if not items:
-            return {"total": 0, "adequate_ratio": 0, "risk_count": 0, "improvable_count": 0}
-        adequate = sum(1 for item in items if item.get("status") == "adequate")
-        risk = sum(1 for item in items if item.get("status") == "risk")
-        improvable = sum(1 for item in items if item.get("status") == "improvable")
+    def _period_summary_from_sql(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        user_id: int,
+        cutoff: str | None = None,
+    ) -> dict[str, Any]:
+        where_clause = "WHERE user_id = ?"
+        params: tuple[Any, ...] = (user_id,)
+        if cutoff is not None:
+            where_clause += " AND created_at >= ?"
+            params = (user_id, cutoff)
+        row = connection.execute(
+            f"""
+            SELECT
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN status = 'adequate' THEN 1 ELSE 0 END), 0) AS adequate,
+                COALESCE(SUM(CASE WHEN status = 'risk' THEN 1 ELSE 0 END), 0) AS risk_count,
+                COALESCE(SUM(CASE WHEN status = 'improvable' THEN 1 ELSE 0 END), 0) AS improvable_count
+            FROM analyses
+            {where_clause}
+            """,
+            params,
+        ).fetchone()
+        total = int(row["total"])
+        adequate = int(row["adequate"])
         return {
-            "total": len(items),
-            "adequate_ratio": round(adequate / len(items), 3),
-            "risk_count": risk,
-            "improvable_count": improvable,
+            "total": total,
+            "adequate_ratio": round(adequate / total, 3) if total else 0,
+            "risk_count": int(row["risk_count"]),
+            "improvable_count": int(row["improvable_count"]),
         }
 
     def _build_weekly_timeline(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:

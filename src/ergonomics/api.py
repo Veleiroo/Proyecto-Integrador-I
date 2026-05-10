@@ -14,7 +14,7 @@ from .app_config import AppConfig, load_app_config
 from .app_security import PasswordHasher, PayloadCipher, create_session_token
 from .app_service import PostureAnalyzer
 from .app_storage import AppStorage
-from .paths import MEDIAPIPE_TASK_MODEL_PATH, YOLO_POSE_WEIGHTS_PATH
+from .paths import MEDIAPIPE_TASK_MODEL_PATH
 
 
 class RegisterRequest(BaseModel):
@@ -48,13 +48,13 @@ async def lifespan(app: FastAPI):
     storage.init_schema()
     password_hasher = PasswordHasher()
     if config.seed_default_users:
-        storage.upsert_user(
+        storage.create_user_if_missing(
             username="admin",
             display_name="Administrador",
             password_hash=password_hasher.hash_password("admin"),
             role="dev",
         )
-        storage.upsert_user(
+        storage.create_user_if_missing(
             username="Pablo",
             display_name="Pablo",
             password_hash=password_hasher.hash_password("1234"),
@@ -65,6 +65,7 @@ async def lifespan(app: FastAPI):
     app.state.storage = storage
     app.state.analyzer = PostureAnalyzer(
         yolo_device=config.yolo_device,
+        yolo_pose_weights_path=config.yolo_pose_weights_path,
     )
     yield
     app.state.analyzer.close()
@@ -209,7 +210,7 @@ def health() -> dict:
         "ok": True,
         "service": "ergonomics-posture-api",
         "front_model": "MediaPipe Pose",
-        "lateral_model": "YOLO Pose",
+        "lateral_model": f"YOLO Pose ({config.yolo_pose_weights_path.stem})",
         "database": str(config.database_path),
         "auth_required": config.require_auth,
         "mode": "local-first",
@@ -217,7 +218,7 @@ def health() -> dict:
         "max_upload_mb": round(config.max_upload_bytes / (1024 * 1024), 1),
         "models_available": {
             "front": MEDIAPIPE_TASK_MODEL_PATH.exists(),
-            "lateral": YOLO_POSE_WEIGHTS_PATH.exists(),
+            "lateral": config.yolo_pose_weights_path.exists(),
         },
     }
 

@@ -32,7 +32,7 @@ MODELS_DIR = PROJECT_ROOT / "models"
 MEDIAPIPE_MODELS_DIR = MODELS_DIR / "mediapipe"
 MEDIAPIPE_TASK_MODEL_PATH = MEDIAPIPE_MODELS_DIR / "pose_landmarker_lite.task"
 YOLO_MODELS_DIR = MODELS_DIR / "yolo"
-YOLO_POSE_WEIGHTS_PATH = YOLO_MODELS_DIR / "yolov8s-pose.pt"
+YOLO_POSE_WEIGHTS_PATH = YOLO_MODELS_DIR / "yolo11s-pose.pt"
 
 # Carpetas de resultados
 POSE_BENCHMARK_RESULTS_DIR = PROJECT_ROOT / "notebooks" / "pose_benchmark" / "results"

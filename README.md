@@ -15,7 +15,7 @@ El repositorio contiene tres bloques:
 Decisiones técnicas principales:
 
 - MediaPipe Pose es el modelo principal para la vista frontal.
-- YOLO Pose se usa en vista lateral porque ofrece mejor cobertura de perfil.
+- YOLO11s Pose se usa en vista lateral porque ofrece mejor cobertura de perfil.
 - MoveNet queda como modelo comparativo en el benchmark, no como opción principal.
 - El MVP frontal se centra en cabeza/cuello, hombros y tronco.
 - Los codos se conservan como métrica, pero no elevan por sí solos el diagnóstico porque suelen quedar fuera de plano.
@@ -126,6 +126,31 @@ python -m pip install -r requirements-api.txt
 PYTHONPATH=src uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
 ```
 
+Instalacion automatizada:
+
+```bash
+python scripts/bootstrap_local.py
+python scripts/start_local.py
+```
+
+Modelos locales:
+
+```bash
+mkdir -p models/mediapipe models/yolo
+curl -L \
+  -o models/mediapipe/pose_landmarker_lite.task \
+  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
+python - <<'PY'
+from pathlib import Path
+from ultralytics import YOLO
+
+target = Path("models/yolo/yolo11s-pose.pt")
+if not target.exists():
+    YOLO("yolo11s-pose.pt")
+    Path("yolo11s-pose.pt").replace(target)
+PY
+```
+
 Frontend:
 
 ```bash
@@ -144,9 +169,21 @@ ERGONOMICS_REQUIRE_AUTH=true
 ERGONOMICS_SEED_DEFAULT_USERS=true
 ERGONOMICS_MAX_UPLOAD_MB=8
 YOLO_DEVICE=auto
+YOLO_POSE_WEIGHTS_PATH=models/yolo/yolo11s-pose.pt
 ```
 
 Si no se define `ERGONOMICS_SECRET_KEY`, el backend genera una clave local junto a la base de datos. En modo local se crean usuarios iniciales `admin`/`admin` y `Pablo`/`1234`, salvo que se desactive con `ERGONOMICS_SEED_DEFAULT_USERS=false`.
+
+Los usuarios iniciales solo se crean si no existen, por lo que un cambio manual de contraseña no se sobrescribe en reinicios posteriores.
+
+## Empaquetado Local
+
+El proyecto puede distribuirse como una carpeta ejecutable con:
+
+- `scripts/bootstrap_local.py`: crea `.venv`, instala dependencias, descarga MediaPipe y YOLO11s, e instala/construye el frontend.
+- `scripts/start_local.py`: arranca backend y frontend local.
+
+Para un `.exe` nativo de Windows, la ruta recomendable es envolver estos scripts con un instalador ligero o empaquetar un launcher con PyInstaller. No conviene meter los pesos ni `node_modules` en Git; el bootstrap los descarga y regenera.
 
 Para los notebooks completos:
 

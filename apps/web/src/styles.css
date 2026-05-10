@@ -2554,3 +2554,240 @@ html[data-theme="dark"] .session-banner {
 html[data-theme="dark"] .deployment-note {
   background: #111a17;
 }
+
+/* Final layout hardening for long filenames, debug output, and medium desktop widths. */
+.app-shell {
+  grid-template-columns: 272px minmax(0, 1fr);
+}
+
+.main-area,
+.content-card,
+.data-card,
+.text-block,
+.camera-card,
+.monitor-panel,
+.debug-uploader,
+.debug-output {
+  min-width: 0;
+}
+
+.section-heading > div,
+.section-title h2,
+.page-header > div,
+.user-chip span,
+.nav-button span,
+.logout-button span {
+  min-width: 0;
+}
+
+.section-heading > span,
+.section-title > span {
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.debug-layout {
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.debug-uploader {
+  position: sticky;
+  top: 28px;
+  align-self: start;
+  overflow: hidden;
+}
+
+.debug-output {
+  overflow: hidden;
+}
+
+.debug-dropzone {
+  min-height: 190px;
+  overflow: hidden;
+}
+
+.debug-dropzone strong {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.deployment-note {
+  align-items: flex-start;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.deployment-note svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.deployment-note p,
+.deployment-note code {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.debug-images img {
+  aspect-ratio: 16 / 9;
+  max-height: 360px;
+}
+
+.debug-grid .data-card {
+  align-content: start;
+}
+
+.panel-note.compact {
+  margin: 8px 0 0;
+  font-size: 0.88rem;
+}
+
+.history-item,
+.component-row,
+.data-row {
+  min-width: 0;
+}
+
+.history-item em,
+.data-row strong,
+.component-row strong {
+  white-space: nowrap;
+}
+
+.data-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1280px) {
+  .main-area {
+    padding: 22px;
+  }
+
+  .debug-layout,
+  .camera-layout,
+  .stats-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .debug-uploader {
+    position: static;
+  }
+
+  .debug-output {
+    order: 2;
+  }
+
+  .debug-images img {
+    max-height: 320px;
+  }
+
+  .monitor-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .monitor-panel .session-banner,
+  .monitor-panel .text-block,
+  .monitor-panel .last-result-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+  }
+
+  html[data-theme="dark"] .sidebar {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .main-area {
+    padding: 18px;
+  }
+
+  .sidebar {
+    padding: 16px;
+  }
+
+  .page-header {
+    align-items: stretch;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .monitor-panel,
+  .debug-images,
+  .debug-grid,
+  .stat-grid,
+  .privacy-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading,
+  .section-title {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .main-area,
+  .login-shell {
+    padding: 12px;
+  }
+
+  .content-card,
+  .camera-card,
+  .monitor-panel,
+  .login-card {
+    padding: 14px;
+  }
+
+  .page-header h1,
+  .login-copy h1 {
+    font-size: 1.9rem;
+    line-height: 1.15;
+  }
+
+  .camera-preview,
+  .camera-preview.compact {
+    height: auto;
+    min-height: 300px;
+  }
+
+  .debug-dropzone,
+  .empty-result,
+  .empty-list {
+    padding: 22px 14px;
+  }
+
+  .history-item {
+    padding: 12px;
+  }
+
+  .user-chip {
+    max-width: 100%;
+  }
+}
+
+html[data-theme="dark"] .deployment-note {
+  background: #121c2e;
+}

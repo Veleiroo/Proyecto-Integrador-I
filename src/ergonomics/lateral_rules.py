@@ -152,12 +152,13 @@ def _valid_lateral_elbow_chain(
 def _choose_lateral_side(row: dict | pd.Series, visibility_threshold: float) -> str | None:
     scores: dict[str, float] = {}
     for side in LATERAL_SIDES:
-        names = ["nose", f"{side}_shoulder", f"{side}_elbow", f"{side}_hip"]
+        names = ["nose", f"{side}_shoulder", f"{side}_hip"]
         score = 0.0
         for name in names:
             value = row.get(f"{name}_visibility")
             if value is not None and not pd.isna(value):
-                score += float(value)
+                weight = 2.0 if name.endswith(("_shoulder", "_hip")) else 1.0
+                score += float(value) * weight
         visible_required = sum(_is_visible(row, name, threshold=visibility_threshold) for name in names)
         scores[side] = score + visible_required
 

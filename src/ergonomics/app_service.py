@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import math
 import shutil
 from dataclasses import dataclass
@@ -180,11 +181,23 @@ def _draw_debug_overlay(image_path: str | Path, pose_row: dict, analysis: dict, 
 
 
 def _image_data_url(image_path: str | Path) -> str:
-    import base64
-
     path = Path(image_path)
     mime = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
     return f"data:{mime};base64,{base64.b64encode(path.read_bytes()).decode('ascii')}"
+
+
+def _preview_image_data_url(image_path: str | Path, max_side: int = 960) -> str:
+    image = cv2.imread(str(image_path))
+    if image is None:
+        return _image_data_url(image_path)
+    height, width = image.shape[:2]
+    scale = min(1.0, max_side / max(width, height))
+    if scale < 1.0:
+        image = cv2.resize(image, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_AREA)
+    ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+    if not ok:
+        return _image_data_url(image_path)
+    return f"data:image/jpeg;base64,{base64.b64encode(encoded.tobytes()).decode('ascii')}"
 
 
 def _clean_value(value: Any) -> Any:
@@ -289,6 +302,7 @@ class PostureAnalyzer:
     front_visibility_threshold: float = 0.35
     lateral_visibility_threshold: float = 0.3
     yolo_device: str | int = "auto"
+    yolo_pose_weights_path: Path = YOLO_POSE_WEIGHTS_PATH
 
     def __post_init__(self) -> None:
         self._front_estimator: MediaPipePoseEstimator | None = None
@@ -320,13 +334,16 @@ class PostureAnalyzer:
     def _get_lateral_estimator(self) -> YoloPoseEstimator:
         if self._lateral_estimator is None or getattr(self._lateral_estimator, "_model", None) is None:
             config = YoloPoseConfig(
-                weights_path=YOLO_POSE_WEIGHTS_PATH,
+                weights_path=self.yolo_pose_weights_path,
                 device=self.yolo_device,
                 min_confidence=self.lateral_visibility_threshold,
             )
             self._lateral_estimator = YoloPoseEstimator(config=config)
             self._lateral_estimator.__enter__()
         return self._lateral_estimator
+
+    def _lateral_model_label(self) -> str:
+        return f"YOLO Pose ({self.yolo_pose_weights_path.stem})"
 
     def _infer_lateral_pose_with_recovery(self, image_path: str | Path) -> dict:
         try:
@@ -354,7 +371,7 @@ class PostureAnalyzer:
         )
 
     def analyze_lateral_image(self, image_path: str | Path) -> dict:
-        model = "YOLO Pose"
+        model = self._lateral_model_label()
         backend = None
         try:
             pose_row = self._infer_lateral_pose_with_recovery(image_path)
@@ -412,7 +429,7 @@ class PostureAnalyzer:
                 pose_detected=bool(pose_row.get("pose_detected")),
             )
         else:
-            model = "YOLO Pose"
+            model = self._lateral_model_label()
             backend = None
             try:
                 pose_row = self._infer_lateral_pose_with_recovery(original_path)
@@ -444,7 +461,7 @@ class PostureAnalyzer:
                 "saved_dir": str(run_dir),
                 "original_path": str(original_path),
                 "annotated_path": str(annotated_path),
-                "original_image_data_url": _image_data_url(original_path),
-                "annotated_image_data_url": _image_data_url(annotated_path),
+                "original_preview_data_url": _preview_image_data_url(original_path),
+                "annotated_preview_data_url": _preview_image_data_url(annotated_path),
             },
         }

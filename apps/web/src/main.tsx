@@ -87,8 +87,8 @@ type DevDebugResponse = {
     saved_dir: string;
     original_path: string;
     annotated_path: string;
-    original_image_data_url: string;
-    annotated_image_data_url: string;
+    original_preview_data_url: string;
+    annotated_preview_data_url: string;
     keypoints: Array<{ name: string; x: number; y: number; visibility: number | null }>;
     rule_lines: Array<{ label: string; from: string; to: string; status: string; points: Array<[number, number]> }>;
   };
@@ -256,6 +256,23 @@ function labelComponent(key: string) {
 
 function labelStatus(status: string) {
   return statusLabels[status] ?? humanizeBackendKey(status);
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatShortDate(value: string) {
+  return new Date(value).toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+  });
 }
 
 function isBodyComponent(key: string) {
@@ -1344,7 +1361,7 @@ function StatsPanel({ stats, history, onSelect }: { stats: StatsSummary | null; 
   const metricRange = maxMetric - minMetric || 1;
   const metricDelta = metricValues.length >= 2 ? metricValues[metricValues.length - 1] - metricValues[0] : null;
   const recommendations = buildHistoricRecommendations(history, activeMetric);
-  
+
   return (
     <section className="stats-layout">
       <div className="content-card">
@@ -1421,7 +1438,7 @@ function StatsPanel({ stats, history, onSelect }: { stats: StatsSummary | null; 
               <div className={`history-status ${tone(item.status)}`} />
               <div>
                 <strong>{item.status_label}</strong>
-                <span>{new Date(item.createdAt).toLocaleString()} · {viewCopy[item.view].label}</span>
+                <span>{formatDateTime(item.createdAt)} · {viewCopy[item.view].label}</span>
               </div>
               <em>{item.pose_detected ? "Pose detectada" : "Sin pose"}</em>
             </button>
@@ -1453,7 +1470,7 @@ function TimelineChart({ timeline, maxDay }: { timeline: StatsSummary["timeline"
               <span className="warn-segment" style={{ height: `${improvableHeight}%` }} />
               <span className="ok-segment" style={{ height: `${adequateHeight}%` }} />
             </div>
-            <small>{new Date(item.date).toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" })}</small>
+            <small>{formatShortDate(item.date)}</small>
           </div>
         );
       })}
@@ -1523,7 +1540,7 @@ function MetricTrendChart({
       <div className="trend-labels">
         {points.map((point) => (
           <button key={point.item.id} type="button" onClick={() => onSelect(point.item)}>
-            {new Date(point.item.createdAt).toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" })}
+            {formatShortDate(point.item.createdAt)}
           </button>
         ))}
       </div>
@@ -1562,7 +1579,7 @@ function HistoryPanel({ history, onSelect }: { history: ReviewRecord[]; onSelect
               <div className={`history-status ${tone(item.status)}`} />
               <div>
                 <strong>{item.fileName}</strong>
-                <span>{new Date(item.createdAt).toLocaleString()} · {viewCopy[item.view].label}</span>
+                <span>{formatDateTime(item.createdAt)} · {viewCopy[item.view].label}</span>
               </div>
               <em>{item.status_label}</em>
             </button>
@@ -1578,6 +1595,7 @@ function DevDebugPanel({ apiBase, authHeaders }: { apiBase: string; authHeaders:
   const [file, setFile] = useState<File | null>(null);
   const [response, setResponse] = useState<DevDebugResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const savedFolder = response?.debug?.saved_dir.split(/[\\/]/).slice(-2).join("/");
 
   async function submitDebug(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1656,7 +1674,7 @@ function DevDebugPanel({ apiBase, authHeaders }: { apiBase: string; authHeaders:
         {response?.debug && (
           <div className="deployment-note">
             <DatabaseZap size={19} />
-            <p>Guardado en <code>{response.debug.saved_dir}</code></p>
+            <p title={response.debug.saved_dir}>Guardado en <code>{savedFolder}</code></p>
           </div>
         )}
       </form>
@@ -1682,11 +1700,11 @@ function DevDebugPanel({ apiBase, authHeaders }: { apiBase: string; authHeaders:
           <>
             <div className="debug-images">
               <figure>
-                <img src={response.debug.original_image_data_url} alt="Captura original" />
+                <img src={response.debug.original_preview_data_url} alt="Captura original" />
                 <figcaption>Original guardada</figcaption>
               </figure>
               <figure>
-                <img src={response.debug.annotated_image_data_url} alt="Captura anotada con keypoints" />
+                <img src={response.debug.annotated_preview_data_url} alt="Captura anotada con keypoints" />
                 <figcaption>Overlay de keypoints y reglas</figcaption>
               </figure>
             </div>
@@ -1696,12 +1714,16 @@ function DevDebugPanel({ apiBase, authHeaders }: { apiBase: string; authHeaders:
                   <h2>Líneas de regla</h2>
                   <span>{response.debug.rule_lines.length}</span>
                 </div>
-                {response.debug.rule_lines.map((line, index) => (
-                  <div className="component-row" key={`${line.label}-${index}`}>
-                    <span>{line.label}</span>
-                    <strong className={tone(line.status)}>{labelStatus(line.status)}</strong>
-                  </div>
-                ))}
+                {response.debug.rule_lines.length === 0 ? (
+                  <p className="panel-note compact">No se generaron líneas con los puntos visibles de esta captura.</p>
+                ) : (
+                  response.debug.rule_lines.map((line, index) => (
+                    <div className="component-row" key={`${line.label}-${index}`}>
+                      <span>{line.label}</span>
+                      <strong className={tone(line.status)}>{labelStatus(line.status)}</strong>
+                    </div>
+                  ))
+                )}
               </section>
               {response.result && (
                 <section className="data-card">
@@ -1710,12 +1732,16 @@ function DevDebugPanel({ apiBase, authHeaders }: { apiBase: string; authHeaders:
                     <span>{response.result.status_label}</span>
                   </div>
                   <p className="panel-note">{response.result.feedback}</p>
-                  {metrics.slice(0, 6).map(([key, value]) => (
-                    <div className="data-row" key={key}>
-                      <span>{labelMetric(key)}</span>
-                      <strong>{formatMetric(value, key)}</strong>
-                    </div>
-                  ))}
+                  {metrics.length === 0 ? (
+                    <p className="panel-note compact">No hay métricas numéricas fiables para esta vista.</p>
+                  ) : (
+                    metrics.slice(0, 6).map(([key, value]) => (
+                      <div className="data-row" key={key}>
+                        <span>{labelMetric(key)}</span>
+                        <strong>{formatMetric(value, key)}</strong>
+                      </div>
+                    ))
+                  )}
                 </section>
               )}
             </div>
@@ -1802,7 +1828,7 @@ function AnalysisDetail({ record, onClose }: { record: ReviewRecord; onClose: ()
       <section className="detail-panel" role="dialog" aria-modal="true" aria-label="Detalle de captura" onClick={(event) => event.stopPropagation()}>
         <header className="detail-header">
           <div>
-            <p className="eyebrow">{new Date(record.createdAt).toLocaleString()} · {viewCopy[record.view].label}</p>
+            <p className="eyebrow">{formatDateTime(record.createdAt)} · {viewCopy[record.view].label}</p>
             <h2>{record.fileName}</h2>
           </div>
           <button className="theme-button compact" type="button" onClick={onClose} aria-label="Cerrar detalle">
