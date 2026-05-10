@@ -4,13 +4,13 @@ cd /d "%~dp0\..\.."
 
 where py >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
-  py -3 scripts\launch_local.py
+  py -3 scripts\launch_local.py || pause
   exit /b %ERRORLEVEL%
 )
 
 where python >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
-  python scripts\launch_local.py
+  python scripts\launch_local.py || pause
   exit /b %ERRORLEVEL%
 )
 

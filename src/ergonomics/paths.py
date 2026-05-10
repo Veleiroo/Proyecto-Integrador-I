@@ -13,11 +13,16 @@ def find_project_root(start: Path | None = None) -> Path:
     miembro del equipo.
     """
     current = (start or Path.cwd()).resolve()
+    if current.is_file():
+        current = current.parent
+        
     for candidate in [current, *current.parents]:
-        # El archivo .git indica que estamos en la raíz del repositorio
-        if (candidate / ".git").exists():
+        # El archivo .root indica que estamos en la raíz del repositorio
+        if (candidate / ".root").exists():
             return candidate
-    return current
+            
+    # Si no lo encontramos, subimos 2 niveles desde src/ergonomics/
+    return current.parents[1] if len(current.parents) > 1 else current
 
 # --- DEFINICIÓN DE RUTAS GLOBALES ---
 
