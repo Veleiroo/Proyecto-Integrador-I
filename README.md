@@ -20,6 +20,10 @@ Decisiones técnicas principales:
 - El MVP frontal se centra en cabeza/cuello, hombros y tronco.
 - Los codos se conservan como métrica, pero no elevan por sí solos el diagnóstico porque suelen quedar fuera de plano.
 
+## Portabilidad
+
+En Windows se puede intalar el sistema de la siguiente forma: Descargar la carpeta comprimida PostureOS_Portable, descomprimirla y ejecutar el archivo .exe.
+
 ## Estructura
 
 ```text
