@@ -20,10 +20,6 @@ Decisiones técnicas principales:
 - El MVP frontal se centra en cabeza/cuello, hombros y tronco.
 - Los codos se conservan como métrica, pero no elevan por sí solos el diagnóstico porque suelen quedar fuera de plano.
 
-## Portabilidad
-
-En Windows se puede intalar el sistema de la siguiente forma: Descargar la carpeta comprimida PostureOS_Portable, descomprimirla y ejecutar el archivo .exe.
-
 ## Estructura
 
 ```text
@@ -118,64 +114,6 @@ Endpoints principales:
 - `POST /api/analyze/combined`
 - `POST /api/dev/analyze-image` solo para perfil técnico.
 
-## Instalación Rápida
-
-Backend:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements-api.txt
-PYTHONPATH=src uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
-```
-
-Instalacion automatizada:
-
-```bash
-python scripts/bootstrap_local.py
-python scripts/start_local.py
-```
-
-Lanzadores de escritorio:
-
-```text
-launchers/windows/PostureOS.bat
-launchers/windows/PostureOS.ps1
-launchers/linux-macos/postureos.sh
-launchers/linux-macos/PostureOS.command
-```
-
-Estos lanzadores ejecutan `scripts/launch_local.py`: si falta `.venv`, modelos o `apps/web/dist`, preparan el entorno y luego abren la aplicación en `http://localhost:8000`.
-
-Modelos locales:
-
-```bash
-mkdir -p models/mediapipe models/yolo
-curl -L \
-  -o models/mediapipe/pose_landmarker_lite.task \
-  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
-python - <<'PY'
-from pathlib import Path
-from ultralytics import YOLO
-
-target = Path("models/yolo/yolo11s-pose.pt")
-if not target.exists():
-    YOLO("yolo11s-pose.pt")
-    Path("yolo11s-pose.pt").replace(target)
-PY
-```
-
-Frontend:
-
-```bash
-cd apps/web
-npm install
-npm run dev
-```
-
-La web usa `VITE_API_BASE_URL`; si no se define, conecta a `http://localhost:8000`.
-
 ## Variables Útiles
 
 ```bash
@@ -227,9 +165,120 @@ npm test
 
 Las pruebas de Playwright esperan que la web esté disponible en `http://localhost:5173`, salvo que se defina `PLAYWRIGHT_BASE_URL`.
 
-## Documentación
+## Portabilidad
 
-La documentación de referencia está en `docs/`:
+En Windows se puede intalar el sistema de la siguiente forma: Descargar la carpeta comprimida PostureOS_Portable, descomprimirla y ejecutar el archivo .exe.
 
-- `AVP1 (Plan de proyecto).pdf`
-- `Caso_de_uso_Salud_DATOS.pdf`
+# Setup
+
+Guía corta para levantar el proyecto en local.
+
+## 1. Entorno Python y Backend local
+
+Linux/macOS:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-api.txt
+PYTHONPATH=src uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
+```
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+$env:PYTHONPATH="src"
+uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
+```
+
+Instalacion automatizada recomendada:
+
+```bash
+python scripts/bootstrap_local.py
+python scripts/start_local.py
+```
+
+Lanzadores equivalentes:
+
+```text
+Windows: launchers/windows/PostureOS.bat
+Windows PowerShell: launchers/windows/PostureOS.ps1
+Linux: launchers/linux-macos/postureos.sh
+macOS: launchers/linux-macos/PostureOS.command
+```
+
+En el primer arranque preparan `.venv`, descargan modelos y construyen la web. Después arrancan la aplicación en `http://localhost:8000`.
+
+Modelos locales requeridos por la API:
+
+```bash
+mkdir -p models/mediapipe models/yolo
+curl -L \
+  -o models/mediapipe/pose_landmarker_lite.task \
+  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
+python - <<'PY'
+from pathlib import Path
+from ultralytics import YOLO
+
+target = Path("models/yolo/yolo11s-pose.pt")
+if not target.exists():
+    YOLO("yolo11s-pose.pt")
+    Path("yolo11s-pose.pt").replace(target)
+PY
+```
+
+Notebooks y benchmark completos:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+## 2. Variables de entorno
+
+Para descargar datasets desde Roboflow crea un archivo `.env` en la raíz:
+
+```bash
+ROBOFLOW_API_KEY=tu_api_key
+```
+
+Variables opcionales de la aplicación:
+
+```bash
+ERGONOMICS_DB_PATH=data/app/postureos.sqlite3
+ERGONOMICS_REQUIRE_AUTH=true
+ERGONOMICS_SEED_DEFAULT_USERS=true
+ERGONOMICS_MAX_UPLOAD_MB=8
+YOLO_DEVICE=auto
+YOLO_POSE_WEIGHTS_PATH=models/yolo/yolo11s-pose.pt
+```
+
+## 3. Frontend
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+La web arranca en `http://localhost:5173` y usa `http://localhost:8000` como backend por defecto.
+
+## 4. Verificación
+
+```bash
+python -m compileall -q src notebooks/pose_benchmark/run_pose_batch.py
+cd apps/web
+npm run typecheck
+npm run build
+```
+
+Para Playwright, deja `npm run dev` activo en otra terminal y ejecuta:
+
+```bash
+npm test
+```
+
+
