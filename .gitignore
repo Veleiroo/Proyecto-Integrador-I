@@ -2,6 +2,7 @@ tmp/
 notebooks/pose_benchmark/01_pose_benchmark_ergonomia.py
 notebooks/ergonomics/*.py
 docs/*latex/
+docs/presentacion.pdf
 .env*
 
 
