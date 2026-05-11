@@ -2,7 +2,7 @@
 
 Guía corta para levantar el proyecto en local.
 
-## 1. Entorno Python
+## 1. Entorno Python y Backend local
 
 Linux/macOS:
 
@@ -10,6 +10,8 @@ Linux/macOS:
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
+python -m pip install -r requirements-api.txt
+PYTHONPATH=src uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
 ```
 
 Windows PowerShell:
@@ -18,13 +20,8 @@ Windows PowerShell:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-```
-
-Backend local:
-
-```bash
-python -m pip install -r requirements-api.txt
-PYTHONPATH=src uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
+$env:PYTHONPATH="src"
+uvicorn ergonomics.api:app --host 0.0.0.0 --port 8000
 ```
 
 Instalacion automatizada recomendada:
