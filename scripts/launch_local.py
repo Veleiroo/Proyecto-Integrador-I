@@ -36,7 +36,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.force_bootstrap or not _runtime_is_ready():
-        _run([_launcher_python(), "scripts/bootstrap_local.py"])
+        _run([_launcher_python(), "scripts/bootstrap_local.py", "--skip-web"])
 
     start_command: list[str | Path] = [VENV_PYTHON, "scripts/start_local.py"]
     if args.no_browser:

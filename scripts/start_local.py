@@ -51,10 +51,10 @@ def main() -> int:
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
 
-    print("Backend: http://localhost:8000")
-    print("Frontend: http://localhost:5173" if args.dev_web else "App: http://localhost:8000")
+    print("Backend: http://127.0.0.1:8000")
+    print("Frontend: http://127.0.0.1:5173" if args.dev_web else "App: http://127.0.0.1:8000")
     if not args.no_browser:
-        webbrowser.open("http://localhost:5173" if args.dev_web else "http://localhost:8000")
+        webbrowser.open("http://127.0.0.1:5173" if args.dev_web else "http://127.0.0.1:8000")
 
     try:
         while True:
