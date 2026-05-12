@@ -1,3 +1,15 @@
+# PostureOS
+
+PostureOS is your private, AI-powered ergonomic guardian. Built for the modern workstation, it uses local computer vision to monitor your posture in real-time, helping you stay aligned and pain-free without your data ever leaving your machine.
+
+PostureOS is a sophisticated, privacy-centric ergonomic assistant that demonstrates the power of edge-AI in personal health. By integrating a multi-model computer vision pipeline the system delivers high-precision, real-time postural diagnostics. Designed with a strict "Privacy-First" philosophy, it processes all video frames locally in memory and secures historical metrics within an encrypted database, ensuring zero cloud dependency and total user data sovereignty. With its modern React/FastAPI stack and a fully automated portable deployment system, PostureOS represents a seamless blend of advanced machine learning engineering and user-centric software design.
+
+PostureOS was created as an academic project by the following authors:
+
+- Alba Castro Groba (github.com/albacas5)
+- Pablo Pérez Rodríguez (github.com/Veleiroo)
+- Carlos Rodríguez Pérez (github.com/carlosrodriguezperez)
+
 # Proyecto Integrador I
 
 Prueba de concepto de análisis ergonómico mediante visión por computador para puestos de trabajo sedentarios.
